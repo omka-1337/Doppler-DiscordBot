@@ -1,0 +1,12 @@
+# cache
+cogs/__pycache__/
+__pycache__
+
+# config (temporary)
+config.py
+pyrefly.toml
+latest.log
+.venv
+.vscode
+.env
+bot.db

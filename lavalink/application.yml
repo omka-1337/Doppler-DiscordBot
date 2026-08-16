@@ -1,0 +1,16 @@
+server:
+  port: 2333
+
+lavalink:
+  plugins:
+  - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+    repository: "https://maven.lavalink.dev/releases"
+  server:
+    password: "${LAVALINK_PASSWORD}"
+    sources:
+      youtube: false
+      soundcloud: true
+      bandcamp: true
+      twitch: true
+      vimeo: true
+      http: true

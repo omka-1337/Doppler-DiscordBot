@@ -1,0 +1,83 @@
+{
+    "main": {
+        "dashboard": "Dashboard"
+    },
+    "tabs": {
+        "embed_builder": "🛠️ Embed Builder",
+        "modules": "🧩 Modules",
+        "settings": "⚙️ Settings"
+    },
+    "embed_builder": {
+        "tab_title": "🛠️ Embed builder",
+        "name": "File name",
+        "title": "Title",
+        "title_content": "Here title",
+        "description": "Description",
+        "description_content": "Here description",
+        "footer": "Footer",
+        "footer_content": "Here footer",
+        "stripe": "Stripe color",
+        "save": "💾 Save JSON",
+        "preview": {
+            "bot": "Bot",
+            "p_title": "Prewiev",
+            "title": "Macarena",
+            "description": "Dale a tu cuerpo alegría Macarena\nA Que tu cuerpo es pa' darle alegría y cosa buena\nA Dale a tu cuerpo alegría, Macarena\nA Hey Macarena, ay",
+            "footer": "Los Del Río"
+        }
+    },
+    "modules": {
+        "title": "🧩 Modules",
+        "description": "Enable, disable, and configure specific bot modules.",
+        "tab1": "🤖 AI Settings",
+        "tab2": "🔊 Voice Manager",
+        "tab3": "📻 Music",
+        "ai_settings": {
+            "title": "AI Persona Settings",
+            "name": "The Name of bot",
+            "prompt": "System Prompt",
+            "description": "Basic instructions that define the behavior and nature of the bot.",
+            "thumbler1_title": "Enable AI Module",
+            "thumbler1_description": "Toggle AI response functionality on or off",
+            "thumbler2_title": "Force Language",
+            "thumbler2_description": "If off, bot matches user language",
+            "lang_title": "Target Language",
+            "slider1": "Level of irony",
+            "slider2": "Severity Level",
+            "save": "💾 Save settings"
+        },
+        "voice": {
+            "title": "Configuring Automatic Voice Channels",
+            "thumbler1_title": "Enable Voice Module",
+            "thumbler1_description": "Toggle dynamic voice channel creation on or off",
+            "field1_title": "Main Voice Channel ID",
+            "field1_description": "A room where, upon entering, the bot will create a private channel and move the user there.",
+            "field2_title": "Category ID for new rooms",
+            "field2_description": "The category in which temporary voice channels will be created.",
+            "save": "💾 Save settings"
+        }
+    },
+    "settings": {
+        "title": "⚙️ Bot Settings",
+        "description": "Managing Bot Settings and AI Behavior ",
+        "save": "💾 Save the main settings",
+        "tab1": "🌐 Main Settings",
+        "tab4": "🔑 API & System",
+        "main_settings": {
+            "title": "Main Settings",
+            "sub_title1": "Command prefix",
+            "description1": "The character that marks the beginning of the bot's text commands.",
+            "save": "💾 Save settings"
+        },
+        "system": {
+            "title": "🔑 API Keys & System Tokens",
+            "description": "Management of access tokens and system API keys.",
+            "warning": "Attention: Changing the Discord Bot Token triggers an automatic restart of the container to apply the new settings. The web panel may be temporarily unavailable for 5–10 seconds.",
+            "field1_title": "Discord Bot Token",
+            "field1_description": "Hover your mouse over the field to view the token.",
+            "field2_title": "Gemini API Key",
+            "field2_description": "Hover your mouse over the field to view the API key.",
+            "save": "💾 Save settings"
+        }
+    }
+}

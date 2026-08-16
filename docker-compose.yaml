@@ -1,0 +1,41 @@
+services:
+  bot:
+    build: .
+    container_name: kishka_discord_bot
+    restart: unless-stopped
+    volumes:
+      - .:/app
+      - embeds_data:/app/embeds
+    depends_on:
+      - music
+
+  web:
+    build: .
+    container_name: kishka_web_dashboard
+    restart: unless-stopped
+    command: uvicorn web.app:app --host 0.0.0.0 --port 8000
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - embeds_data:/app/embeds
+    depends_on:
+      - bot
+
+  music:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: lavalink_music_server
+    restart: unless-stopped
+    environment:
+      - _JAVA_OPTIONS=-Xmx500m
+    env_file:
+      - .env
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml
+    expose:
+      - "2333"
+
+volumes:
+  embeds_data:

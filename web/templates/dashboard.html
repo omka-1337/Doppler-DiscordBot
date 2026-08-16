@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Dynamic page title with the bot's name -->
+    <title>{{ bot.global_name }} — Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body class="bg-[#1e1f22] text-gray-200 min-h-screen font-sans">
+
+    <!-- NAVBAR -->
+    <nav class="bg-[#2b2d31] border-b border-[#3f4147] px-6 py-3 mb-6 flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+            <!-- Dynamic bot avatar -->
+            {% if bot.avatar_url %}
+            <img src="{{ bot.avatar_url }}" alt="Bot Avatar" class="w-8 h-8 rounded-full border border-indigo-500">
+            {% else %}
+            <div
+                class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-sm">
+                {{ bot.username[0] }}
+            </div>
+            {% endif %}
+
+            <!-- Dynamic bot name -->
+            <span class="text-xl font-bold text-white">{{ bot.global_name }}</span>
+            <span class="bg-indigo-600 text-xs text-white px-2 py-0.5 rounded font-medium"> {{ t.main.dashboard }}
+            </span>
+        </div>
+
+        <!-- NAV BAR SWITCH BUTTONS -->
+        <div class="flex gap-2">
+            <button onclick="switchTab('embeds')" id="btn-embeds"
+                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition bg-indigo-600 text-white">
+                {{ t.tabs.embed_builder }}
+            </button>
+            <button onclick="switchTab('cogs')" id="btn-cogs"
+                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                {{ t.tabs.modules }}
+            </button>
+            <button onclick="switchTab('settings')" id="btn-settings"
+                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                {{ t.tabs.settings }}
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN FUNCTIONS -->
+    <main class="max-w-6xl mx-auto px-6 pb-12">
+
+        <!-- 1. TAB: EMBED BUILDER -->
+        <div id="tab-embeds" class="tab-content grid grid-cols-1 md:grid-cols-2 gap-8">
+
+            <!-- LEFT COLUMN: FORM -->
+            <div class="bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+                <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    {{ t.embed_builder.tab_title }}
+                </h2>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.name }}
+                    </label>
+                    <input type="text" id="fileName" placeholder=" {{ t.embed_builder.name }} "
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                </div>
+
+                <hr class="border-[#3f4147]">
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.title }}
+                    </label>
+                    <input type="text" id="title" placeholder=" {{ t.embed_builder.title_content }} "
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.description
+                        }} </label>
+                    <textarea id="description" rows="5" placeholder=" {{ t.embed_builder.description_content }} "
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition"></textarea>
+                </div>
+
+                <div class="flex gap-4">
+                    <div class="w-1/2">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.stripe
+                            }} </label>
+                        <input type="color" id="color" value="#5865f2"
+                            class="w-full h-10 bg-[#1e1f22] border border-[#3f4147] rounded cursor-pointer p-1">
+                    </div>
+                    <div class="w-1/2">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.footer
+                            }} </label>
+                        <input type="text" id="footer" placeholder=" {{ t.embed_builder.footer_content }} "
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    </div>
+                </div>
+
+                <button onclick="saveEmbed()"
+                    class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded transition shadow-md mt-2">
+                    {{ t.embed_builder.save }}
+                </button>
+                <p id="statusMsg" class="text-sm text-center font-semibold mt-2 hidden"></p>
+            </div>
+
+            <!-- RIGHT COLUMN: A DISCORD-STYLE PREVIEW -->
+            <div class="bg-[#313338] p-6 rounded-lg border border-[#2b2d31] shadow-lg h-fit">
+                <h2 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider"> {{
+                    t.embed_builder.preview.p_title }}
+                </h2>
+
+                <div class="flex gap-4">
+                    <!-- Chat avatar -->
+                    {% if bot.avatar_url %}
+                    <img src="{{ bot.avatar_url }}" alt="Bot Avatar" class="w-10 h-10 rounded-full flex-shrink-0">
+                    {% else %}
+                    <div
+                        class="w-10 h-10 rounded-full bg-indigo-500 flex-shrink-0 flex items-center justify-center font-bold text-white">
+                        {{ bot.username[0] }}
+                    </div>
+                    {% endif %}
+
+                    <div class="flex-1 overflow-hidden">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-white">{{ bot.global_name }}</span>
+                            <span class="bg-[#5865f2] text-[10px] text-white px-1 rounded font-medium"> {{
+                                t.embed_builder.preview.bot }} </span>
+                        </div>
+
+                        <!-- EMBED CARD -->
+                        <div id="embedCard"
+                            class="mt-2 bg-[#2b2d31] rounded p-4 max-w-md border-l-4 embed-card-default">
+                            <h3 id="pvTitle" class="font-bold text-white text-base mb-1 break-words"> {{
+                                t.embed_builder.preview.title }} </h3>
+                            <p id="pvDesc" class="text-gray-300 text-sm whitespace-pre-line mb-2 break-words"> {{
+                                t.embed_builder.preview.description }} </p>
+                            <p id="pvFooter" class="text-gray-400 text-xs mt-2 hidden break-words"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 2. TAB: MODULES -->
+        <div id="tab-cogs" class="tab-content hidden space-y-6">
+
+            <!-- Sub-category Selector Header for Modules -->
+            <div
+                class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        {{ t.tabs.modules }}
+                    </h2>
+                    <p class="text-xs text-gray-400 mt-1"> {{ t.modules.description }} </p>
+                </div>
+
+                <!-- Switch sub-modules -->
+                <div class="flex gap-2 bg-[#1e1f22] p-1 rounded-md border border-[#3f4147]">
+                    <button onclick="switchModuleCategory('AI')" id="mod-btn-AI"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white">
+                        {{ t.modules.tab1 }}
+                    </button>
+                    <button onclick="switchModuleCategory('Voice')" id="mod-btn-Voice"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.modules.tab2 }}
+                    </button>
+                    <button onclick="switchModuleCategory('Music')" id="mod-btn-Music"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.modules.tab3 }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- MODULE: AI SETTINGS -->
+            <form id="form-module-AI" onsubmit="saveSettings(event, 'AI')"
+                class="module-form bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.ai_settings.thumbler1_title }}
+                        </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.ai_settings.thumbler1_description }}
+                        </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_ai_enabled" {% if settings_ai.get('ai_enabled', 'true' )=='true'
+                            %}checked{% endif %} class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    {{ t.modules.ai_settings.title }} </h3>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.ai_settings.name
+                        }} </label>
+                    <input type="text" name="ai_bot_name" id="set_ai_bot_name"
+                        value="{{ settings_ai.get('ai_bot_name', 'Kishka AI') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.ai_settings.prompt }} </label>
+                    <textarea name="ai_system_prompt" id="set_ai_system_prompt" rows="4"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">{{ settings_ai.get('ai_system_prompt', '') }}</textarea>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.ai_settings.description }} </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- LANGUAGE & FORCE TOGGLE -->
+                    <div class="space-y-3">
+                        <!-- Thumbler -->
+                        <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded border border-[#3f4147]">
+                            <div>
+                                <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                                    t.modules.ai_settings.thumbler2_title }} </span>
+                                <span class="text-[10px] text-gray-400"> {{
+                                    t.modules.ai_settings.thumbler2_description
+                                    }} </span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="chk_ai_force_language" {% if
+                                    settings_ai.get('ai_force_language', 'false' )=='true' %}checked{% endif %}
+                                    onchange="document.getElementById('set_ai_language').disabled = !this.checked;"
+                                    class="sr-only peer">
+                                <div
+                                    class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Language change -->
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                                t.modules.ai_settings.lang_title }} </label>
+                            <select name="ai_language" id="set_ai_language" {% if
+                                settings_ai.get('ai_force_language', 'false' ) !='true' %}disabled{% endif %}
+                                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                <option value="Ukrainian" {% if settings_ai.get('ai_language')=='Ukrainian' %}selected{%
+                                    endif %}>Ukrainian</option>
+                                <option value="English" {% if settings_ai.get('ai_language')=='English' %}selected{%
+                                    endif %}>English</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Sliders -->
+                    <div class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-xs font-bold text-gray-400 uppercase mb-1">
+                                <span> {{ t.modules.ai_settings.slider1 }} </span>
+                                <span id="val_ai_irony" class="text-indigo-400">{{ settings_ai.get('ai_irony', '0.2')
+                                    }}</span>
+                            </div>
+                            <input type="range" name="ai_irony" min="0" max="1" step="0.1"
+                                value="{{ settings_ai.get('ai_irony', '0.2') }}"
+                                oninput="document.getElementById('val_ai_irony').textContent = this.value"
+                                class="w-full accent-indigo-500 bg-[#1e1f22] rounded cursor-pointer h-2">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs font-bold text-gray-400 uppercase mb-1">
+                                <span> {{ t.modules.ai_settings.slider2 }} </span>
+                                <span id="val_ai_seriousness" class="text-indigo-400">{{
+                                    settings_ai.get('ai_seriousness', '0.8') }}</span>
+                            </div>
+                            <input type="range" name="ai_seriousness" min="0" max="1" step="0.1"
+                                value="{{ settings_ai.get('ai_seriousness', '0.8') }}"
+                                oninput="document.getElementById('val_ai_seriousness').textContent = this.value"
+                                class="w-full accent-indigo-500 bg-[#1e1f22] rounded cursor-pointer h-2">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.modules.ai_settings.save }}
+                    </button>
+                </div>
+            </form>
+
+            <!-- MODULE: VOICE SETTINGS -->
+            <form id="form-module-Voice" onsubmit="saveSettings(event, 'Voice')"
+                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.voice.thumbler1_title }} </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.voice.thumbler1_description }} </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_voice_enabled" {% if settings_voice.get('voice_enabled', 'true'
+                            )=='true' %}checked{% endif %} class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    {{ t.modules.voice.title }} </h3>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.voice.field1_title }}
+                    </label>
+                    <input type="text" name="main_voice_channel_id" id="set_main_voice_channel_id"
+                        value="{{ settings_voice.get('main_voice_channel_id', '0') }}"
+                        placeholder="Sample: 123456789012345678"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field1_description }} </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.voice.field2_title }} </label>
+                    <input type="text" name="category_id" id="set_category_id"
+                        value="{{ settings_voice.get('category_id', '0') }}" placeholder="Sample: 123456789012345678"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono font-normal">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field2_title }} </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.modules.voice.save }}
+                    </button>
+                </div>
+            </form>
+
+            <!-- MODULE: MUSIC SETTINGS -->
+            <form id="form-module-Music" onsubmit="saveSettings(event, 'Music')"
+                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase">Music Module Status</span>
+                        <span class="text-[10px] text-gray-400">Enable or disable the music module</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_music_enabled" {% if settings_modules.get('music_enabled', 'true'
+                            )=='true' %}checked{% endif %} class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Header & Add Bot Button -->
+                <div class="flex items-center justify-between border-b border-[#3f4147] pb-2">
+                    <h3 class="text-md font-bold text-gray-200 uppercase text-xs tracking-wider">Music Instances</h3>
+                    <button type="button" onclick="addMusicBot()"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded text-xs transition flex items-center gap-1 shadow">
+                        + Add Bot
+                    </button>
+                </div>
+
+                <!-- Dynamic Container for Music Bots -->
+                <div id="music-bots-container" class="space-y-3">
+                    <!-- Rows will be injected here via JavaScript -->
+                </div>
+
+                <div class="pt-2">
+                    <button type="button" onclick="saveMusicBot(1)"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        Save Module Settings
+                    </button>
+                </div>
+            </form>
+
+            <p id="moduleStatusMsg"
+                class="text-sm font-semibold hidden p-3 rounded bg-[#2b2d31] border border-[#3f4147] text-center"></p>
+
+        </div>
+
+        <!-- 3. TAB: SETTINGS -->
+        <div id="tab-settings" class="tab-content hidden space-y-6">
+
+            <!-- Category Selector Header -->
+            <div
+                class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        {{ t.settings.title }}
+                    </h2>
+                    <p class="text-xs text-gray-400 mt-1"> {{ t.settings.description }}
+                    </p>
+                </div>
+
+                <!-- Switch sub-categories -->
+                <div class="flex gap-2 bg-[#1e1f22] p-1 rounded-md border border-[#3f4147]">
+                    <button onclick="switchSettingsCategory('Main')" id="cat-btn-Main"
+                        class="settings-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white">
+                        {{ t.settings.tab1 }}
+                    </button>
+                    <button type="button" onclick="switchSettingsCategory('System')" id="cat-btn-System"
+                        class="settings-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.settings.tab4 }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Category: MAIN SETTINGS -->
+            <form id="form-settings-Main" onsubmit="saveSettings(event, 'Main')"
+                class="settings-form bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    {{ t.settings.main_settings.title }} </h3>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.settings.main_settings.sub_title1 }} </label>
+                    <input type="text" name="prefix" id="set_prefix" value="{{ settings_main.get('prefix', '!') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.main_settings.description1 }} </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.settings.main_settings.save }}
+                    </button>
+                </div>
+            </form>
+
+            <!-- Category: API KEYS & TOKEN -->
+            <form id="form-settings-System" onsubmit="saveSystemSettings(event)"
+                class="settings-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-5">
+
+                <div class="border-b border-[#3f4147] pb-3">
+                    <h3
+                        class="text-md font-bold text-gray-200 uppercase text-xs tracking-wider flex items-center gap-2">
+                        {{ t.settings.system.title }}
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1"> {{ t.settings.system.description }} </p>
+                </div>
+
+                <!-- Warning Block -->
+                <div
+                    class="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs leading-relaxed flex items-start gap-2.5">
+                    <span class="text-base leading-none">⚠️</span>
+                    <div>
+                        {{ t.settings.system.warning }}
+                    </div>
+                </div>
+
+                <!-- Discord Bot Token -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5"> {{
+                        t.settings.system.field1_title }} </label>
+                    <div class="relative group">
+                        <input type="password" name="DISCORD_BOT_TOKEN" id="set_discord_bot_token"
+                            value="{{ discord_token }}" placeholder="Enter new token..." onmouseenter="this.type='text'"
+                            onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.system.field1_description }} </p>
+                </div>
+
+                <!-- Gemini API Key -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5"> {{
+                        t.settings.system.field2_title }} </label>
+                    <div class="relative group">
+                        <input type="password" name="GEMINI_API_KEY" id="set_gemini_api_key" value="{{ gemini_key }}"
+                            placeholder="Enter new API key..." onmouseenter="this.type='text'"
+                            onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.system.field2_description }} </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2.5 rounded-lg transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.settings.system.save }}
+                    </button>
+                </div>
+            </form>
+
+            <p id="settingsStatusMsg"
+                class="text-sm font-semibold hidden p-3 rounded bg-[#2b2d31] border border-[#3f4147] text-center"></p>
+
+        </div>
+
+    </main>
+
+    <!-- Custom Dashboard Logic Script -->
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

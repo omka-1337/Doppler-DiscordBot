@@ -28,7 +28,7 @@ class MusicControlView(discord.ui.View):
     async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         self.player.queue.clear()
-        await self.player.disconnect()
+        await self.player.cleanup_and_disconnect()
 
     @discord.ui.button(label="🔁 Loop", style=discord.ButtonStyle.secondary)
     async def toggle_loop(self, interaction: discord.Interaction, button: discord.ui.Button):

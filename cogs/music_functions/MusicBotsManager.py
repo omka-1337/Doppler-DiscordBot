@@ -94,6 +94,21 @@ class MusicBotsManager(commands.Cog):
             if isinstance(player, MusicPlayer):
                 await player.play_next()
 
+        @sub_bot.event
+        async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+            voice_client = member.guild.voice_client
+            if not isinstance(voice_client, MusicPlayer):
+                return
+
+            channel = voice_client.channel
+            if channel is None:
+                return
+
+            members = [m for m in channel.members if not m.bot]
+            if not members:
+                logging.info("Voice channel is empty, disconecting...")
+                await voice_client.cleanup_and_disconnect()
+
 
 # ------------------------------------------------------------------------------
 

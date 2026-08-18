@@ -87,7 +87,6 @@ class MusicCommands(commands.Cog):
         # A user's message is deleted only after the command has been successfully executed,
         # so that if an error occurs, the original message remains available for context.
         await ctx.message.delete()
-        await ctx.send(f"Added to queue: {track.title}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCommands(bot))

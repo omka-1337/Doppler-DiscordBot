@@ -64,10 +64,29 @@ class MusicPlayer(wavelink.Player):
             return
 
         embed = discord.Embed(
-            title="Now playing",
-            description=track.title,
+            title="🎵 Now playing",
+            description=f"[{track.title}]({track.uri})" if track.uri else track.title,
             color=0x5865F2
         )
+
+        if track.author:
+            embed.add_field(name="Author", value=track.author, inline=True)
+
+        if track.length and not track.is_stream:
+            minutes, seconds = divmod(track.length // 1000, 60)
+            embed.add_field(name="Duration", value=f"{minutes}:{seconds:02d}", inline=True)
+        elif track.is_stream:
+            embed.add_field(name="Duration", value="🔴 Live", inline=True)
+
+        if track.source:
+            embed.add_field(name="Source", value=track.source.capitalize(), inline=True)
+
+        if track.artwork:
+            embed.set_thumbnail(url=track.artwork)
+
+        footer_text = "🔁 Looping" if self.loop else None
+        if footer_text:
+            embed.set_footer(text=footer_text)
 
         # A local import within a method breaks the circular import, since the module loads MusicControlView while
         # the method is already executing, when all classes and files have been fully initialized in memory.

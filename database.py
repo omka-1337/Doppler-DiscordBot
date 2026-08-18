@@ -5,7 +5,10 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "bot.db"
 
+# A single, shared connection for the entire bot process (opening new connections for every request is expensive and doesn't make sense).
 _db: aiosqlite.Connection | None = None
+
+# Locks the database until the query is completed. This ensures sequential access, which prevents "database is locked" errors.
 _db_lock = asyncio.Lock()
 
 
@@ -44,6 +47,7 @@ async def ensure_tables(db):
     """)
 
     # TABLE / MUSIC BOTs SETTINGS
+    # The bot_token and bot_user_id entries are initially created as empty fields and are filled in later via the web dashboard.
     await db.execute("""
         CREATE TABLE IF NOT EXISTS music_bots (
             bot_rowid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,6 +86,7 @@ async def init_db():
             ("music_bot_id", "", "Music")
         ]
 
+        # Calling ON CONFLICT DO NOTHING during startup applies only the initial default settings without overwriting changes already made by the user.
         for key, val, cat in default_settings:
             try:
                 await db.execute(
@@ -171,6 +176,7 @@ async def get_all_temp_channels() -> list[tuple[int, int]]:
 # ----------------------MUSIC BOTS-------------------------------------
 
 # ADD MUSIC BOT
+# Creates an empty, inactive bot record for the item just added to the panel, returning its ID for future updates and configuration.
 async def add_music_bot():
     async with _db_lock:
         db = await _connect()
@@ -181,6 +187,9 @@ async def add_music_bot():
 # ---------------------------------------------------------------------
 
 # UPDATE MUSIC BOT
+# The dynamic SET part of the request updates only the fields that were actually sent,
+# ignoring values of `None` so as not to overwrite other data
+# (for example, the token when toggling the `status` switch).
 async def update_music_bot(
     bot_rowid: int,
     bot_token: str | None = None,
@@ -210,8 +219,8 @@ async def update_music_bot(
         logging.info("No parameters provided for update. Skipping execution.")
         return
 
+    # The bot_rowid is added to the end of params for the WHERE clause, since placeholders are substituted sequentially from left to right.
     params.append(bot_rowid)
-    # Використовуємо явно bot_rowid замість rowid
     query = f"UPDATE music_bots SET {', '.join(fields)} WHERE bot_rowid = ?"
 
     try:
@@ -225,7 +234,7 @@ async def update_music_bot(
 
 # ---------------------------------------------------------------------
 
-# GET MUSIC BOT
+# The function returns a record by ID, replacing None in the token with an empty string to make it easier to check for the presence of data.
 async def get_music_bot(bot_rowid: int) -> tuple[int, str, int | None, int] | None:
     try:
         async with _db_lock:
@@ -252,7 +261,7 @@ async def get_music_bot(bot_rowid: int) -> tuple[int, str, int | None, int] | No
 
 # ---------------------------------------------------------------------
 
-# GET ALL MUSIC BOTS
+# The function returns all records without filtering, leaving it up to the caller to determine which bots are inactive or empty.
 async def get_all_music_bots() -> list[tuple]:
     query = """
         SELECT bot_rowid, bot_token, bot_user_id, bot_status
@@ -273,12 +282,11 @@ async def get_all_music_bots() -> list[tuple]:
 
 # ---------------------------------------------------------------------
 
-# DELETE MUSIC BOT
+# Deletes the bot's data from the db.
 async def remove_music_bot(bot_rowid: int):
     try:
         async with _db_lock:
             db = await _connect()
-            # Використовуємо явно bot_rowid
             query = "DELETE FROM music_bots WHERE bot_rowid = ?"
             await db.execute(query, (bot_rowid,))
             await db.commit()

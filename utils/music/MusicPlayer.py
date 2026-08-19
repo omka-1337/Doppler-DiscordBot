@@ -90,7 +90,7 @@ class MusicPlayer(wavelink.Player):
 
         # A local import within a method breaks the circular import, since the module loads MusicControlView while
         # the method is already executing, when all classes and files have been fully initialized in memory.
-        from utils.MusicControlView import MusicControlView # <- Control buttons.
+        from utils.music.MusicControlView import MusicControlView # <- Control buttons.
         view = MusicControlView(self)
 
         self.now_playing_message = await text_channel.send(embed=embed, view=view)

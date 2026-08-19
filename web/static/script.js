@@ -73,6 +73,8 @@ async function saveEmbed() {
     statusMsg.classList.remove('hidden');
 }
 
+// ---------------------------------------------------------------------
+
 // Save settings via API
 async function saveSettings(event, category) {
     event.preventDefault();
@@ -98,11 +100,7 @@ async function saveSettings(event, category) {
     if (category === 'AI') {
         const aiChk = document.getElementById('chk_ai_enabled');
         const forceLangChk = document.getElementById('chk_ai_force_language');
-        if (aiChk) settingsPayload.settings['ai_enabled'] = aiChk.checked ? 'true' : 'false';
         if (forceLangChk) settingsPayload.settings['ai_force_language'] = forceLangChk.checked ? 'true' : 'false';
-    } else if (category === 'Voice') {
-        const voiceChk = document.getElementById('chk_voice_enabled');
-        if (voiceChk) settingsPayload.settings['voice_enabled'] = voiceChk.checked ? 'true' : 'false';
     }
 
     try {
@@ -131,6 +129,27 @@ async function saveSettings(event, category) {
         statusMsg.classList.add('hidden');
     }, 4000);
 }
+
+// ---------------------------------------------------------------------
+
+async function toggleModule(moduleName, enabled) {
+    try {
+        const res = await fetch('/api/toggle-module', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ module: moduleName, enabled })
+        });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') {
+            alert('Failed to toggle module.');
+        }
+    } catch (err) {
+        console.error('Error toggling module:', err);
+        alert('Error connecting to the server.')
+    }
+}
+
+// ---------------------------------------------------------------------
 
 // Loading settings from the database
 async function loadSystemSettings() {

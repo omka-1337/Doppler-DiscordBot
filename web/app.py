@@ -170,27 +170,43 @@ async def save_settings(request: Request):
     for key, value in settings.items():
         await set_settings(key, str(value), category)
 
-    cog_map = {
-        "AI": ("cogs.ai_functions", "ai_enabled"),
-        "Voice": ("cogs.voicemanager", "voice_enabled")
-    }
-
-    if category in cog_map:
-        cog_path, key_name = cog_map[category]
-        is_enabled = settings.get(key_name, "true").lower() == "true"
-        action = "load" if is_enabled else "unload"
-
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    "http://kishka_discord_bot:8001/internal/toggle-cog",
-                    json={"cog": cog_path, "action": action},
-                    timeout=2.0
-                )
-        except Exception as e:
-            print(f"Failed to notify bot container: {e}")
-
     return JSONResponse({"status": "ok", "message": "Settings saved successfully!"})
+
+# ---------------------------------------------------------------------
+
+MODULE_TOGGLE_MAP = {
+    "ai": ("cogs.ai.GeminiChat", "AI", "ai_enabled"),
+    "voice": ("cogs.VoiceManager", "Voice", "voice_enabled"),
+    "music": ("cogs.music.MusicBotsManager", "Modules", "music_bots"),
+}
+
+class ModuleTogglePayload(BaseModel):
+    module: str
+    enabled: bool
+
+@app.post("/api/toggle-module")
+async def toggle_module(payload: ModuleTogglePayload):
+    if payload.module not in MODULE_TOGGLE_MAP:
+        raise HTTPException(status_code=400, detail="Unkown module")
+
+    cog_path, category, key_name = MODULE_TOGGLE_MAP[payload.module]
+
+    await set_settings(key_name, "true" if payload.enabled else "false", category)
+
+    action = "load" if payload.enabled else "unload"
+    notified = False
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "http://kishka_discord_bot:8001/internal/toggle-cog",
+                json={"cog": cog_path, "action": action},
+                timeout=5.0
+            )
+            notified = response.status_code == 200
+    except Exception as e:
+        print(f"Failed to notify bot container: {e}")
+
+    return JSONResponse({"status": "ok", "module_notified": notified})
 
 # ----------------------------MUSIC BOTS-------------------------------
 

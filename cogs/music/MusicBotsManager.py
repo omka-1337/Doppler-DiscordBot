@@ -1,4 +1,4 @@
-from utils.MusicPalyer import MusicPlayer
+from utils.music.MusicPlayer import MusicPlayer
 import asyncio
 import logging
 import discord
@@ -194,4 +194,3 @@ class MusicBotsManager(commands.Cog):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicBotsManager(bot))
-

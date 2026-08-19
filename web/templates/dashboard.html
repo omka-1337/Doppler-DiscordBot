@@ -191,7 +191,7 @@
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="chk_ai_enabled" {% if settings_ai.get('ai_enabled', 'true' )=='true'
-                            %}checked{% endif %} class="sr-only peer">
+                            %}checked{% endif %} onchange="toggleModule('ai', this.checked)" class="sr-only peer">
                         <div
                             class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
                         </div>
@@ -306,7 +306,8 @@
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="chk_voice_enabled" {% if settings_voice.get('voice_enabled', 'true'
-                            )=='true' %}checked{% endif %} class="sr-only peer">
+                            )=='true' %}checked{% endif %} onchange="toggleModule('voice', this.checked)"
+                            class="sr-only peer">
                         <div
                             class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
                         </div>
@@ -357,7 +358,8 @@
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="chk_music_enabled" {% if settings_modules.get('music_enabled', 'true'
-                            )=='true' %}checked{% endif %} class="sr-only peer">
+                            )=='true' %}checked{% endif %} onchange="toggleModule('music', this.checked)"
+                            class="sr-only peer">
                         <div
                             class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
                         </div>

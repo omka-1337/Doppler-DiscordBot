@@ -3,8 +3,8 @@ import wavelink
 import logging
 
 from typing import cast
-from cogs.music_functions.MusicBotsManager import MusicBotsManager
-from utils.MusicPalyer import MusicPlayer
+from cogs.music.MusicBotsManager import MusicBotsManager
+from utils.music.MusicPlayer import MusicPlayer
 from discord.ext import commands
 
 class MusicCommands(commands.Cog):

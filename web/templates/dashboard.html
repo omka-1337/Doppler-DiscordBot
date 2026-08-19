@@ -350,6 +350,24 @@
             <form id="form-module-Music" onsubmit="saveSettings(event, 'Music')"
                 class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
 
+                <!-- YouTube OAuth Status -->
+                <div class="bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="block text-xs font-bold text-gray-300 uppercase">YouTube OAuth</span>
+                            <span id="youtube-oauth-status" class="text-[10px] text-gray-400">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="password" id="youtube-refresh-token" placeholder="Paste refresh token..."
+                            class="flex-1 bg-[#2b2d31] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
+                        <button type="button" onclick="saveYouTubeOAuthToken()"
+                            class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded font-semibold transition flex-shrink-0">
+                            Save
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Module Enable/Disable Toggle Row -->
                 <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
                     <div>

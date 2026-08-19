@@ -29,6 +29,9 @@ app = FastAPI(title="Bot Dashboard")
 EMBEDS_DIR = BASE_DIR / "embeds"
 EMBEDS_DIR.mkdir(exist_ok=True)
 
+LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
+LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
+
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
@@ -275,6 +278,43 @@ async def notify_music_bot(bot_rowid: int, action: str) -> bool:
     except Exception as e:
         print(f"Failed to notify bot conatiner about music bot {bot_rowid}: {e}")
         return False
+
+# ---------------------------OAuth-------------------------------------
+
+@app.get("/api/music/youtube-oauth-status")
+async def get_youtube_oauth_status():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{LAVALINK_URI}/youtube",
+                headers={"Authorization": LAVALINK_PASSWORD or ""},
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return JSONResponse({"status": "ok", "configured": data.get("refreshToken") is not None})
+            return JSONResponse({"status": "error", "message": "Lavalink returned an error"}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
+
+class YouTubeOAuthPayload(BaseModel):
+    refresh_token: str
+
+@app.post("/api/music/youtube-oauth")
+async def set_youtube_oauth(payload: YouTubeOAuthPayload):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{LAVALINK_URI}/youtube",
+                headers={"Authorization": LAVALINK_PASSWORD or ""},
+                json={"refreshToken": payload.refresh_token, "skipInitialization": True},
+                timeout=5.0
+            )
+            if response.status_code == 204:
+                return JSONResponse({"status": "ok"})
+            return JSONResponse({"status": "error", "message": "Lavalink rejected the token"}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
 
 # ---------------------------------------------------------------------
 

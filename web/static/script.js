@@ -170,9 +170,72 @@ async function loadSystemSettings() {
     }
 }
 
+// ---------------------------------------------------------------------
+
+async function loadYouTubeOAuthStatus() {
+    const statusEl = document.getElementById('youtube-oauth-status');
+    if (!statusEl) return;
+
+    try {
+        const res = await fetch('/api/music/youtube-oauth-status');
+        const data = await res.json();
+
+        if (res.ok && data.status == 'ok') {
+            statusEl.textContent = data.configured ? '✅ Configured' : '⚠️ Not configured';
+            statusEl.className = data.configured
+                ? 'text-[10px] text-green-400'
+                : 'text-[10px] text-amber-400';
+        } else {
+            statusEl.textContent = '❌ Unable to reach Lavalink';
+            statusEl.className = 'text-[10px] text-red-400';
+        }
+
+    } catch (err) {
+        console.error('Error loading YouTube OAuth status:', err);
+        statusEl.textContent = '❌ Error connecting to server';
+        statusEl.className = 'text-[10px] text-red-400';
+    }
+}
+
+async function saveYouTubeOAuthToken() {
+    const tokenInput = document.getElementById('youtube-refresh-token');
+    if (!tokenInput) return;
+
+    const token = tokenInput.value.trim();
+    if (!token) {
+        alert('Please enter a refresh token.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/music/youtube-oauth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: token })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+            alert('YouTube OAuth token saved successfully!');
+            tokenInput.value = '';
+            await loadYouTubeOAuthStatus();
+        } else {
+            alert('Failed to save token: ' + (data.message || 'unknown error'));
+        }
+    } catch (err) {
+        console.error('Error saving YouTube OAuth token:', err);
+        alert('Error connecting to the server.');
+    }
+}
+
+// ---------------------------------------------------------------------
+
 // Call the function as soon as the page loads
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
+    loadMusicBots();
+    loadYouTubeOAuthStatus();
+
 });
 
 async function saveSystemSettings(event) {
@@ -461,11 +524,6 @@ async function removeMusicBot(botRowId) {
         alert('Error connecting to the server.');
     }
 }
-
-// Initialize music bots when page finishes loading
-document.addEventListener('DOMContentLoaded', () => {
-    loadMusicBots();
-});
 
 async function handleToggle(event, botId) {
     event.preventDefault();

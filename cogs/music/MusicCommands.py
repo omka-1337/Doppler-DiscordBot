@@ -3,6 +3,7 @@ import wavelink
 import logging
 
 from typing import cast
+from typing import Literal
 from cogs.music.MusicBotsManager import MusicBotsManager
 from utils.music.MusicPlayer import MusicPlayer
 from discord.ext import commands
@@ -22,8 +23,16 @@ class MusicCommands(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="play", description="Play a track or add it to the queue")
-    @app_commands.describe(query="Song name, SoundCloud link, or other supported URL")
-    async def play(self, interaction: discord.Interaction, query: str):
+    @app_commands.describe(
+        query="Song name, SoundCloud link, or other supported URL",
+        source="Which source to search (ignored if query is a direct URL)"
+    )
+    @app_commands.choices(source=[
+        app_commands.Choice(name="YouTube", value="yt"),
+        app_commands.Choice(name="SoundCloud", value="sc"),
+    ])
+
+    async def play(self, interaction: discord.Interaction, query: str, source: app_commands.Choice[str] | None = None):
         # The use of cast is necessary because get_cog() returns an Optional[Cog], and the static type
         # checker in discord.py cannot automatically determine the specific class based on its string name.
         manager = cast(MusicBotsManager | None, self.bot.get_cog("MusicBotsManager"))
@@ -62,7 +71,7 @@ class MusicCommands(commands.Cog):
         # The text channel object must also be retrieved from the subbot's own cache by ID, and VoiceChannel
         # and StageChannel are valid types, since chats within voice channels support the .send() method.
         raw_text_channel = sub_bot.get_channel(interaction.channel_id)
-        
+
         if not isinstance(raw_text_channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel)):
             await interaction.response.send_message("Music bot cannot access this text channel.", ephemeral=True)
             return
@@ -81,14 +90,20 @@ class MusicCommands(commands.Cog):
         # so that new notifications are sent to the exact text chat from which the user called the "play" command.
         player.text_channel = raw_text_channel
 
-        # The direct URL is passed to Lavalink in its original form, since wrapping it in search prefixes
-        # ("scsearch:"/"ytsearch:") causes the link to fail recognition and results in the default prefix being forced.
+        # Link filtering. There's no point in passing a direct link as the track title. We also use prefixes embedded in the wavelink.
         if query.startswith("http://") or query.startswith("https://"):
             search_query = query
+            search_source = None
         else:
-            search_query = f"scearch:{query}"
+            search_query = query
+            source_value = source.value if source is not None else "sc"
+            search_source = wavelink.TrackSource.SoundCloud if source_value == "sc" else wavelink.TrackSource.YouTube
 
-        tracks: wavelink.Search = await wavelink.Playable.search(search_query)
+        if search_source is not None:
+            tracks: wavelink.Search = await wavelink.Playable.search(search_query, source=search_source)
+        else:
+            tracks: wavelink.Search = await wavelink.Playable.search(search_query)
+
         if not tracks:
             await interaction.followup.send(f"Can't find: {query}")
             return

@@ -29,6 +29,9 @@ app = FastAPI(title="Bot Dashboard")
 EMBEDS_DIR = BASE_DIR / "embeds"
 EMBEDS_DIR.mkdir(exist_ok=True)
 
+LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
+LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
+
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
@@ -170,27 +173,43 @@ async def save_settings(request: Request):
     for key, value in settings.items():
         await set_settings(key, str(value), category)
 
-    cog_map = {
-        "AI": ("cogs.ai_functions", "ai_enabled"),
-        "Voice": ("cogs.voicemanager", "voice_enabled")
-    }
-
-    if category in cog_map:
-        cog_path, key_name = cog_map[category]
-        is_enabled = settings.get(key_name, "true").lower() == "true"
-        action = "load" if is_enabled else "unload"
-
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    "http://kishka_discord_bot:8001/internal/toggle-cog",
-                    json={"cog": cog_path, "action": action},
-                    timeout=2.0
-                )
-        except Exception as e:
-            print(f"Failed to notify bot container: {e}")
-
     return JSONResponse({"status": "ok", "message": "Settings saved successfully!"})
+
+# ---------------------------------------------------------------------
+
+MODULE_TOGGLE_MAP = {
+    "ai": ("cogs.ai.GeminiChat", "AI", "ai_enabled"),
+    "voice": ("cogs.VoiceManager", "Voice", "voice_enabled"),
+    "music": ("cogs.music.MusicBotsManager", "Modules", "music_bots"),
+}
+
+class ModuleTogglePayload(BaseModel):
+    module: str
+    enabled: bool
+
+@app.post("/api/toggle-module")
+async def toggle_module(payload: ModuleTogglePayload):
+    if payload.module not in MODULE_TOGGLE_MAP:
+        raise HTTPException(status_code=400, detail="Unkown module")
+
+    cog_path, category, key_name = MODULE_TOGGLE_MAP[payload.module]
+
+    await set_settings(key_name, "true" if payload.enabled else "false", category)
+
+    action = "load" if payload.enabled else "unload"
+    notified = False
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "http://kishka_discord_bot:8001/internal/toggle-cog",
+                json={"cog": cog_path, "action": action},
+                timeout=5.0
+            )
+            notified = response.status_code == 200
+    except Exception as e:
+        print(f"Failed to notify bot container: {e}")
+
+    return JSONResponse({"status": "ok", "module_notified": notified})
 
 # ----------------------------MUSIC BOTS-------------------------------
 
@@ -259,6 +278,43 @@ async def notify_music_bot(bot_rowid: int, action: str) -> bool:
     except Exception as e:
         print(f"Failed to notify bot conatiner about music bot {bot_rowid}: {e}")
         return False
+
+# ---------------------------OAuth-------------------------------------
+
+@app.get("/api/music/youtube-oauth-status")
+async def get_youtube_oauth_status():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{LAVALINK_URI}/youtube",
+                headers={"Authorization": LAVALINK_PASSWORD or ""},
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return JSONResponse({"status": "ok", "configured": data.get("refreshToken") is not None})
+            return JSONResponse({"status": "error", "message": "Lavalink returned an error"}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
+
+class YouTubeOAuthPayload(BaseModel):
+    refresh_token: str
+
+@app.post("/api/music/youtube-oauth")
+async def set_youtube_oauth(payload: YouTubeOAuthPayload):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{LAVALINK_URI}/youtube",
+                headers={"Authorization": LAVALINK_PASSWORD or ""},
+                json={"refreshToken": payload.refresh_token, "skipInitialization": True},
+                timeout=5.0
+            )
+            if response.status_code == 204:
+                return JSONResponse({"status": "ok"})
+            return JSONResponse({"status": "error", "message": "Lavalink rejected the token"}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
 
 # ---------------------------------------------------------------------
 

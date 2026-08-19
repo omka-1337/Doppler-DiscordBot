@@ -191,7 +191,7 @@
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="chk_ai_enabled" {% if settings_ai.get('ai_enabled', 'true' )=='true'
-                            %}checked{% endif %} class="sr-only peer">
+                            %}checked{% endif %} onchange="toggleModule('ai', this.checked)" class="sr-only peer">
                         <div
                             class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
                         </div>
@@ -306,7 +306,8 @@
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="chk_voice_enabled" {% if settings_voice.get('voice_enabled', 'true'
-                            )=='true' %}checked{% endif %} class="sr-only peer">
+                            )=='true' %}checked{% endif %} onchange="toggleModule('voice', this.checked)"
+                            class="sr-only peer">
                         <div
                             class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
                         </div>
@@ -349,6 +350,24 @@
             <form id="form-module-Music" onsubmit="saveSettings(event, 'Music')"
                 class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
 
+                <!-- YouTube OAuth Status -->
+                <div class="bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="block text-xs font-bold text-gray-300 uppercase">YouTube OAuth</span>
+                            <span id="youtube-oauth-status" class="text-[10px] text-gray-400">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="password" id="youtube-refresh-token" placeholder="Paste refresh token..."
+                            class="flex-1 bg-[#2b2d31] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
+                        <button type="button" onclick="saveYouTubeOAuthToken()"
+                            class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded font-semibold transition flex-shrink-0">
+                            Save
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Module Enable/Disable Toggle Row -->
                 <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
                     <div>
@@ -357,7 +376,8 @@
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="chk_music_enabled" {% if settings_modules.get('music_enabled', 'true'
-                            )=='true' %}checked{% endif %} class="sr-only peer">
+                            )=='true' %}checked{% endif %} onchange="toggleModule('music', this.checked)"
+                            class="sr-only peer">
                         <div
                             class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
                         </div>

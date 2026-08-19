@@ -108,10 +108,18 @@ class MusicCommands(commands.Cog):
             await interaction.followup.send(f"Can't find: {query}")
             return
 
+        if isinstance(tracks, wavelink.Playlist):
+            added_count = await player.queue.put_wait(tracks)
+            await interaction.followup.send(f"Added playlist **{tracks.name}** to queue ({added_count} tracks).", ephemeral=True)
+
+            if not player.playing:
+                await player.play_next()
+            return
+
         track = tracks[0]
         await player.add_to_queue(track)
 
-        await interaction.followup.send(f"Added to queue: {track.title}")
+        await interaction.followup.send(f"Added to queue: {track.title}", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicCommands(bot))

@@ -78,6 +78,10 @@ class MusicPlayer(wavelink.Player):
         elif track.is_stream:
             embed.add_field(name="Duration", value="🔴 Live", inline=True)
 
+        if not self.queue.is_empty:
+            next_track = self.queue[0]
+            embed.add_field(name="Up next", value=next_track.title, inline=False)
+
         if track.source:
             embed.add_field(name="Source", value=track.source.capitalize(), inline=True)
 

@@ -27,6 +27,8 @@ plugins:
       - WEB
       - WEBEMBEDDED
       - TV
+      - TVHTML5SIMPLY
+      - ANDROID_TESTSUITE
     oauth:
       enabled: true
 

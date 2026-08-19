@@ -61,3 +61,26 @@ class MusicControlView(discord.ui.View):
         button.style = discord.ButtonStyle.success if self.player.loop else discord.ButtonStyle.secondary
 
         await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="📋 Queue", style=discord.ButtonStyle.secondary)
+    async def show_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.player.queue.is_empty:
+            await interaction.response.send_message("The queue is empty", ephemeral=True)
+            return
+        
+        lines=[]
+        for i, track in enumerate(self.player.queue, start=1):
+            lines.append(f"{i}. {track.title}")
+            if i >= 15:
+                remaining = len(self.player.queue) - 15
+                if remaining > 0:
+                    lines.append(f"...and {remaining} more.")
+                break
+
+        embed = discord.Embed(
+            title="Queue",
+            description="\n".join(lines),
+            color=0x5865F2
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)

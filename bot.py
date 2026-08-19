@@ -163,6 +163,14 @@ async def load_cogs(bot):
 async def on_ready():
     logging.info(f"Logged in as {bot.user}")
 
+    if bot.guilds:
+        guild = bot.guilds[0]
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
+    else:
+        logging.warning("Bot is not in any guild, slash commands not synced.")
+
 # ---------------------------------------------------------------------
 
 # COMMANDS

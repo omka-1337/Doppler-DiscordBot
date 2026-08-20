@@ -297,11 +297,15 @@ async def get_youtube_oauth_status():
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
 
+# ---------------------------------------------------------------------
+
 class YouTubeOAuthPayload(BaseModel):
     refresh_token: str
 
 @app.post("/api/music/youtube-oauth")
 async def set_youtube_oauth(payload: YouTubeOAuthPayload):
+    update_env_file("YOUTUBE_OAUTH_REFRESH_TOKEN", payload.refresh_token)
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(

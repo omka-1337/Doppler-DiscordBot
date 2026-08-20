@@ -67,6 +67,7 @@ async def init_db():
         default_settings = [
             # MAIN
             ("prefix", "+", "Main"),
+
             # AI
             ("ai_chat_enabled", "true", "AI"),
             ("ai_bot_name", "Kara AI", "AI"),
@@ -74,14 +75,22 @@ async def init_db():
             ("ai_language", "English", "AI"),
             ("ai_irony", "0.2", "AI"),
             ("ai_seriousness", "0.8", "AI"),
-            ("ai_force_language", "false", "AI"),
+            ("ai_force_language", "true", "AI"),
+
             # VOICEMANAGER
             ("category_id", "0", "Voice"),
             ("main_voice_channel_id", "0", "Voice"),
+
+            # MODERATION
+            ("mod_log_channel_id", "0", "Moderation"),
+            ("mod_log_enabled", "false", "Moderation"),
+
             # MODULES
             ("ai_features", "true", "Modules"),
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
+            ("moderation", "true", "Modules"),
+
             # MUSIC BOTS
             ("music_bot_id", "", "Music")
         ]

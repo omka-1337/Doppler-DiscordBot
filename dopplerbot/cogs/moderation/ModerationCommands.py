@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import timedelta, datetime, timezone
 
-import database as db
+import dopplerbot.database as db
 
 # ---------------------------------------------------------------------
 

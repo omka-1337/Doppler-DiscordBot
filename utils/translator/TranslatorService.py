@@ -17,7 +17,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-import database
+import dopplerbot.database as database
 from utils.translator.LocaleMapping import to_deepl_lang, to_google_lang
 
 logger = logging.getLogger(__name__)

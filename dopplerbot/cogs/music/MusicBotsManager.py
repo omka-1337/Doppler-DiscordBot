@@ -7,7 +7,7 @@ import os
 
 from typing import Dict
 from discord.ext import commands
-from database import get_all_music_bots, update_music_bot
+from dopplerbot.database import get_all_music_bots, update_music_bot
 
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")

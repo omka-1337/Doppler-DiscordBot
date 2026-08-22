@@ -1,4 +1,4 @@
-from database import update_music_bot, add_music_bot, remove_music_bot, get_all_music_bots
+from dopplerbot.database import update_music_bot, add_music_bot, remove_music_bot, get_all_music_bots
 import asyncio
 import json
 import os
@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from utils.i18n import get_translations
 
-from database import get_settings_by_category, set_settings
+from dopplerbot.database import get_settings_by_category, set_settings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -26,8 +26,8 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 app = FastAPI(title="Bot Dashboard")
 
-EMBEDS_DIR = BASE_DIR / "embeds"
-EMBEDS_DIR.mkdir(exist_ok=True)
+EMBEDS_DIR = BASE_DIR / "savedata" / "embeds"
+EMBEDS_DIR.mkdir(parents=True, exist_ok=True)
 
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
@@ -182,11 +182,11 @@ async def save_settings(request: Request):
 # ---------------------------------------------------------------------
 
 MODULE_TOGGLE_MAP = {
-    "ai": ("cogs.ai.GeminiChat", "AI", "ai_enabled"),
-    "voice": ("cogs.VoiceManager", "Voice", "voice_enabled"),
-    "music": ("cogs.music.MusicBotsManager", "Modules", "music_bots"),
-    "moderation": ("cogs.moderation.ModerationCommands", "Modules", "moderation"),
-    "translator": ("cogs.Translator", "Modules", "translator"),
+    "ai": ("dopplerbot.cogs.ai.GeminiChat", "AI", "ai_enabled"),
+    "voice": ("dopplerbot.cogs.VoiceManager", "Voice", "voice_enabled"),
+    "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
+    "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
+    "translator": ("dopplerbot.cogs.Translator", "Modules", "translator"),
 }
 
 class ModuleTogglePayload(BaseModel):
@@ -207,7 +207,7 @@ async def toggle_module(payload: ModuleTogglePayload):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://kishka_discord_bot:8001/internal/toggle-cog",
+                "http://doppler_discord_bot:8001/internal/toggle-cog",
                 json={"cog": cog_path, "action": action},
                 timeout=5.0
             )
@@ -276,7 +276,7 @@ async def notify_music_bot(bot_rowid: int, action: str) -> bool:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://kishka_discord_bot:8001/internal/toggle-music-bot",
+                "http://doppler_discord_bot:8001/internal/toggle-music-bot",
                 json={"bot_rowid": bot_rowid, "action": action},
                 timeout=5.0
             )

@@ -6,7 +6,7 @@ from discord.ext import commands
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
-from database import get_settings_by_category
+from dopplerbot.database import get_settings_by_category
 
 load_dotenv()
 

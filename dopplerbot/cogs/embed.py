@@ -6,7 +6,7 @@ from discord.ext import commands
 class EmbedCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.embeds_dir = Path(__file__).resolve().parent.parent / "embeds"
+        self.embeds_dir = Path(__file__).resolve().parent.parent.parent / "savedata" / "embeds"
 
     @commands.command(name="embed")
     @commands.has_permissions(administrator=True)

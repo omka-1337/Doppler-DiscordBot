@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import database
+import dopplerbot.database as database
 from utils.translator.LocaleMapping import (
     get_base_lang,
     display_name,

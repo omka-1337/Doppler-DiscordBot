@@ -1,17 +1,16 @@
 services:
   bot:
     build: .
-    container_name: kishka_discord_bot
+    container_name: doppler_discord_bot
     restart: unless-stopped
     volumes:
       - .:/app
-      - embeds_data:/app/embeds
     depends_on:
       - music
 
   web:
     build: .
-    container_name: kishka_web_dashboard
+    container_name: doppler_web_dashboard
     restart: unless-stopped
     command: uvicorn web.app:app --host 0.0.0.0 --port 8000
     env_file:
@@ -20,7 +19,6 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
-      - embeds_data:/app/embeds
     depends_on:
       - bot
 
@@ -36,6 +34,3 @@ services:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml
     expose:
       - "2333"
-
-volumes:
-  embeds_data:

@@ -3,7 +3,9 @@ import aiosqlite
 import logging
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "bot.db"
+SAVEDATA_DIR = Path(__file__).resolve().parent.parent / "savedata"
+SAVEDATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = SAVEDATA_DIR / "bot.db"
 
 # A single, shared connection for the entire bot process (opening new connections for every request is expensive and doesn't make sense).
 _db: aiosqlite.Connection | None = None

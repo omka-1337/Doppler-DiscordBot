@@ -85,11 +85,17 @@ async def init_db():
             ("mod_log_channel_id", "0", "Moderation"),
             ("mod_log_enabled", "false", "Moderation"),
 
+            # TRANSLATOR
+            ("translator_provider", "google", "Translator"),
+            ("translator_deepl_api_key", "", "Translator"),
+            ("translator_google_api_key", "", "Translator"),
+
             # MODULES
             ("ai_features", "true", "Modules"),
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
             ("moderation", "true", "Modules"),
+            ("translator", "true", "Modules"),
 
             # MUSIC BOTS
             ("music_bot_id", "", "Music")

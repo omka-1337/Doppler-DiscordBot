@@ -236,9 +236,24 @@ async function saveYouTubeOAuthToken() {
 // ---------------------------------------------------------------------
 
 // Call the function as soon as the page loads
+// Show only the API key field relevant to the currently selected Translator provider
+function toggleTranslatorProviderFields() {
+    const select = document.getElementById('set_translator_provider');
+    const deeplBlock = document.getElementById('translator-deepl-key-block');
+    const googleBlock = document.getElementById('translator-google-key-block');
+    if (!select || !deeplBlock || !googleBlock) return;
+
+    const isDeepl = select.value === 'deepl';
+    deeplBlock.classList.toggle('hidden', !isDeepl);
+    googleBlock.classList.toggle('hidden', isDeepl);
+}
+
+// ---------------------------------------------------------------------
+
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
     loadMusicBots();
+    toggleTranslatorProviderFields();
     loadYouTubeOAuthStatus();
 
 });

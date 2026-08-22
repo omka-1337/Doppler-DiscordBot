@@ -173,6 +173,10 @@
                         class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
                         {{ t.modules.tab3 }}
                     </button>
+                    <button onclick="switchModuleCategory('Moderation')" id="mod-btn-Moderation"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.modules.tab4 }}
+                    </button>
                 </div>
             </div>
 
@@ -342,6 +346,67 @@
                     <button type="submit"
                         class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
                         {{ t.modules.voice.save }}
+                    </button>
+                </div>
+            </form>
+
+            <!-- MODULE: MODERATION SETTINGS -->
+            <form id="form-module-Moderation" onsubmit="saveSettings(event, 'Moderation')"
+                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.moderation.thumbler1_title }} </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.moderation.thumbler1_description }} </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_moderation_enabled" {% if
+                            settings_modules.get('moderation', 'true' )=='true' %}checked{% endif %}
+                            onchange="toggleModule('moderation', this.checked)" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    {{ t.modules.moderation.title }} </h3>
+
+                <!-- Mod Log Enabled Toggle -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded border border-[#3f4147]">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.moderation.thumbler2_title }} </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.moderation.thumbler2_description }} </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="mod_log_enabled" id="chk_mod_log_enabled" {% if
+                            settings_moderation.get('mod_log_enabled', 'true' )=='true' %}checked{% endif %}
+                            class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.moderation.field1_title }}
+                    </label>
+                    <input type="text" name="mod_log_channel_id" id="set_mod_log_channel_id"
+                        value="{{ settings_moderation.get('mod_log_channel_id', '0') }}"
+                        placeholder="Sample: 123456789012345678"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.moderation.field1_description }} </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.modules.moderation.save }}
                     </button>
                 </div>
             </form>

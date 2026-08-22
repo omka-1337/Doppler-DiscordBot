@@ -32,6 +32,7 @@
         "tab1": "🤖 AI Settings",
         "tab2": "🔊 Voice Manager",
         "tab3": "📻 Music",
+        "tab4": "🛡️ Moderation",
         "ai_settings": {
             "title": "AI Persona Settings",
             "name": "The Name of bot",
@@ -54,6 +55,16 @@
             "field1_description": "A room where, upon entering, the bot will create a private channel and move the user there.",
             "field2_title": "Category ID for new rooms",
             "field2_description": "The category in which temporary voice channels will be created.",
+            "save": "💾 Save settings"
+        },
+        "moderation": {
+            "title": "Moderation Settings",
+            "thumbler1_title": "Enable Moderation Module",
+            "thumbler1_description": "Toggle moderation commands (kick, ban, timeout, warn) on or off",
+            "thumbler2_title": "Enable Mod Log",
+            "thumbler2_description": "Send a log message to the channel below for every moderation action",
+            "field1_title": "Mod Log Channel ID",
+            "field1_description": "The channel where kick/ban/timeout/warn actions will be logged.",
             "save": "💾 Save settings"
         }
     },

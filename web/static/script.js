@@ -103,6 +103,11 @@ async function saveSettings(event, category) {
         if (forceLangChk) settingsPayload.settings['ai_force_language'] = forceLangChk.checked ? 'true' : 'false';
     }
 
+    if (category === 'Moderation') {
+        const modLogChk = document.getElementById('chk_mod_log_enabled');
+        if (modLogChk) settingsPayload.settings['mod_log_enabled'] = modLogChk.checked ? 'true' : 'false';
+    }
+
     try {
         const res = await fetch('/api/save-settings', {
             method: 'POST',

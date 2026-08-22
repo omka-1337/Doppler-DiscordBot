@@ -75,6 +75,7 @@ async def get_dashboard(request: Request):
     settings_ai = await get_settings_by_category("AI")
     settings_voice = await get_settings_by_category("Voice")
     settings_modules = await get_settings_by_category("Modules")
+    settings_moderation = await get_settings_by_category("Moderation")
 
     t = get_translations("en")
 
@@ -88,6 +89,7 @@ async def get_dashboard(request: Request):
             "settings_ai": settings_ai,
             "settings_voice": settings_voice,
             "settings_modules": settings_modules,
+            "settings_moderation": settings_moderation,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "gemini_key": os.getenv("GEMINI_API_KEY", "")
         }
@@ -181,6 +183,7 @@ MODULE_TOGGLE_MAP = {
     "ai": ("cogs.ai.GeminiChat", "AI", "ai_enabled"),
     "voice": ("cogs.VoiceManager", "Voice", "voice_enabled"),
     "music": ("cogs.music.MusicBotsManager", "Modules", "music_bots"),
+    "moderation": ("cogs.moderation.ModerationCommands", "Modules", "moderation"),
 }
 
 class ModuleTogglePayload(BaseModel):

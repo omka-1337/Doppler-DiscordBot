@@ -10,20 +10,17 @@
     "embed_builder": {
         "tab_title": "🛠️ Embed builder",
         "name": "File name",
-        "title": "Title",
-        "title_content": "Here title",
-        "description": "Description",
-        "description_content": "Here description",
-        "footer": "Footer",
-        "footer_content": "Here footer",
-        "stripe": "Stripe color",
+        "cards": "Cards",
+        "add_card": "+ Add card",
+        "cards_hint": "Each card is its own independent block (own color, own text/images). All cards are sent as one Discord message.",
+        "cards_empty_hint": "Add a card to start building the message.",
+        "add_text": "📝 Add text",
+        "add_image": "🖼️ Add image",
         "save": "💾 Save JSON",
         "preview": {
             "bot": "Bot",
             "p_title": "Prewiev",
-            "title": "Macarena",
-            "description": "Dale a tu cuerpo alegría Macarena\nA Que tu cuerpo es pa' darle alegría y cosa buena\nA Dale a tu cuerpo alegría, Macarena\nA Hey Macarena, ay",
-            "footer": "Los Del Río"
+            "empty": "Add a card to see a preview..."
         }
     },
     "modules": {

@@ -1,36 +1,331 @@
-// Form elements
-const elTitle = document.getElementById('title');
-const elDesc = document.getElementById('description');
-const elColor = document.getElementById('color');
-const elFooter = document.getElementById('footer');
+// ---------------------------------------------------------------------
+// LAYOUT BUILDER (Components V2): several independent cards (each its own
+// Container: own accent color, own ordered text/image blocks), all sent
+// together as ONE Discord message. No lines between cards, just spacing.
 
-// Preview elements
-const pvTitle = document.getElementById('pvTitle');
-const pvDesc = document.getElementById('pvDesc');
-const pvFooter = document.getElementById('pvFooter');
-const embedCard = document.getElementById('embedCard');
+const elFileName = document.getElementById('fileName');
+const cardsContainer = document.getElementById('cardsContainer');
+const cardsEmptyHint = document.getElementById('cardsEmptyHint');
+const previewCards = document.getElementById('previewCards');
 
-// On-the-Fly preview updates
-function updatePreview() {
-    pvTitle.textContent = elTitle.value || 'Title';
-    pvDesc.textContent = elDesc.value || 'Message content...';
-    embedCard.style.borderColor = elColor.value;
+let cardCounter = 0;
+let blockCounter = 0;
 
-    if (elFooter.value.trim()) {
-        pvFooter.textContent = elFooter.value;
-        pvFooter.classList.remove('hidden');
-    } else {
-        pvFooter.classList.add('hidden');
+function updateCardsEmptyHint() {
+    if (cardsEmptyHint) {
+        cardsEmptyHint.classList.toggle('hidden', cardsContainer.children.length > 0);
     }
 }
 
-if (elTitle && elDesc && elColor && elFooter) {
-    [elTitle, elDesc, elColor, elFooter].forEach(el => el.addEventListener('input', updatePreview));
+function moveElement(el, direction) {
+    const sibling = direction === 'up' ? el.previousElementSibling : el.nextElementSibling;
+    if (!sibling) return;
+    if (direction === 'up') {
+        el.parentElement.insertBefore(el, sibling);
+    } else {
+        el.parentElement.insertBefore(sibling, el);
+    }
+    updatePreview();
+}
+
+// Shared move-up/move-down/remove button group used by both card and block rows.
+function createControlButtons(row, onRemove) {
+    const wrap = document.createElement('div');
+    wrap.className = 'flex items-center gap-1';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'text-gray-400 hover:text-white text-xs px-1';
+    upBtn.title = 'Move up';
+    upBtn.textContent = '▲';
+    upBtn.addEventListener('click', () => moveElement(row, 'up'));
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'text-gray-400 hover:text-white text-xs px-1';
+    downBtn.title = 'Move down';
+    downBtn.textContent = '▼';
+    downBtn.addEventListener('click', () => moveElement(row, 'down'));
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'text-red-400 hover:text-red-300 text-xs px-1';
+    removeBtn.title = 'Remove';
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', () => {
+        row.remove();
+        if (onRemove) onRemove();
+        updatePreview();
+    });
+
+    wrap.appendChild(upBtn);
+    wrap.appendChild(downBtn);
+    wrap.appendChild(removeBtn);
+    return wrap;
+}
+
+// ---------------------------------------------------------------------
+// CARDS
+
+function addCard() {
+    const row = document.createElement('div');
+    row.className = 'card-row bg-[#1e1f22] border border-[#3f4147] rounded-lg p-3';
+    row.id = `card-${cardCounter++}`;
+
+    const header = document.createElement('div');
+    header.className = 'flex items-center justify-between mb-2';
+
+    const labelWrap = document.createElement('div');
+    labelWrap.className = 'flex items-center gap-2';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'text-xs font-bold text-gray-300';
+    labelEl.textContent = '🗂️ Card';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'card-color w-8 h-6 rounded cursor-pointer border border-[#3f4147]';
+    colorInput.value = '#5865f2';
+    colorInput.title = 'Card accent color';
+    colorInput.addEventListener('input', updatePreview);
+
+    labelWrap.appendChild(labelEl);
+    labelWrap.appendChild(colorInput);
+
+    header.appendChild(labelWrap);
+    header.appendChild(createControlButtons(row, updateCardsEmptyHint));
+    row.appendChild(header);
+
+    const blocksDiv = document.createElement('div');
+    blocksDiv.className = 'card-blocks space-y-2';
+    row.appendChild(blocksDiv);
+
+    const addButtonsWrap = document.createElement('div');
+    addButtonsWrap.className = 'flex gap-3 mt-2';
+
+    const addTextBtn = document.createElement('button');
+    addTextBtn.type = 'button';
+    addTextBtn.className = 'text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold';
+    addTextBtn.textContent = '📝 Add text';
+    addTextBtn.addEventListener('click', () => addTextBlock(blocksDiv));
+
+    const addImageBtn = document.createElement('button');
+    addImageBtn.type = 'button';
+    addImageBtn.className = 'text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold';
+    addImageBtn.textContent = '🖼️ Add image';
+    addImageBtn.addEventListener('click', () => addImageBlock(blocksDiv));
+
+    addButtonsWrap.appendChild(addTextBtn);
+    addButtonsWrap.appendChild(addImageBtn);
+    row.appendChild(addButtonsWrap);
+
+    cardsContainer.appendChild(row);
+    updateCardsEmptyHint();
+    updatePreview();
+}
+
+// ---------------------------------------------------------------------
+// BLOCKS (live inside a single card's .card-blocks container)
+
+function addBlockShell(row, icon, label) {
+    const header = document.createElement('div');
+    header.className = 'flex items-center justify-between mb-1';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'text-[10px] font-bold text-gray-400 uppercase';
+    labelEl.textContent = `${icon} ${label}`;
+
+    header.appendChild(labelEl);
+    header.appendChild(createControlButtons(row));
+    row.appendChild(header);
+}
+
+function addTextBlock(blocksDiv) {
+    const row = document.createElement('div');
+    row.className = 'block-row bg-[#2b2d31] border border-[#3f4147] rounded p-2';
+    row.dataset.type = 'text';
+    row.id = `block-${blockCounter++}`;
+    addBlockShell(row, '📝', 'Text');
+
+    const textarea = document.createElement('textarea');
+    textarea.rows = 3;
+    textarea.className = 'block-text-content w-full bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition';
+    textarea.placeholder = 'Text content (Markdown supported)';
+    textarea.addEventListener('input', updatePreview);
+    row.appendChild(textarea);
+
+    blocksDiv.appendChild(row);
+    updatePreview();
+}
+
+function addImageBlock(blocksDiv) {
+    const row = document.createElement('div');
+    row.className = 'block-row bg-[#2b2d31] border border-[#3f4147] rounded p-2';
+    row.dataset.type = 'image';
+    row.id = `block-${blockCounter++}`;
+    addBlockShell(row, '🖼️', 'Image');
+
+    const urlInput = document.createElement('input');
+    urlInput.type = 'text';
+    urlInput.className = 'block-image-url w-full bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition';
+    urlInput.placeholder = 'https://example.com/image.png';
+    urlInput.addEventListener('input', () => {
+        // Typing a URL by hand supersedes a previously uploaded file for this block.
+        delete row.dataset.attachment;
+        updatePreview();
+    });
+    row.appendChild(urlInput);
+
+    const uploadWrap = document.createElement('div');
+    uploadWrap.className = 'flex items-center gap-2 mt-1.5';
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.png,.jpg,.jpeg';
+    fileInput.className = 'flex-1 text-[11px] text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-[#3f4147] file:text-white file:text-[11px]';
+
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type = 'button';
+    uploadBtn.className = 'bg-[#3f4147] hover:bg-[#4a4d53] text-white text-[11px] px-2.5 py-1.5 rounded font-semibold transition flex-shrink-0';
+    uploadBtn.textContent = '⬆️ Upload';
+
+    uploadWrap.appendChild(fileInput);
+    uploadWrap.appendChild(uploadBtn);
+    row.appendChild(uploadWrap);
+
+    const status = document.createElement('p');
+    status.className = 'text-[11px] mt-1';
+    row.appendChild(status);
+
+    uploadBtn.addEventListener('click', async () => {
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('Please choose an image file first');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch('/api/upload-embed-image', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (res.ok && data.status === 'ok') {
+                row.dataset.attachment = data.filename;
+                urlInput.value = '';
+                status.textContent = `✅ Uploaded: ${file.name}`;
+                status.className = 'text-[11px] mt-1 text-green-400';
+                updatePreview();
+            } else {
+                status.textContent = `❌ ${data.detail || 'Upload failed'}`;
+                status.className = 'text-[11px] mt-1 text-red-400';
+            }
+        } catch (err) {
+            status.textContent = '❌ Error connecting to the server';
+            status.className = 'text-[11px] mt-1 text-red-400';
+        }
+    });
+
+    blocksDiv.appendChild(row);
+    updatePreview();
+}
+
+// ---------------------------------------------------------------------
+// COLLECT + PREVIEW + SAVE
+
+// Reads the ordered block list straight out of one card's block container.
+function collectBlocksFrom(blocksDiv) {
+    const rows = blocksDiv.querySelectorAll('.block-row');
+    const blocks = [];
+
+    rows.forEach(row => {
+        const type = row.dataset.type;
+
+        if (type === 'text') {
+            const content = row.querySelector('.block-text-content').value.trim();
+            if (content) blocks.push({ type: 'text', content });
+
+        } else if (type === 'image') {
+            const attachment = row.dataset.attachment;
+            const url = row.querySelector('.block-image-url').value.trim();
+            if (attachment) {
+                blocks.push({ type: 'image', attachment });
+            } else if (url) {
+                blocks.push({ type: 'image', url });
+            }
+        }
+    });
+
+    return blocks;
+}
+
+// Reads all cards (in display order), each with its color + its blocks.
+// Cards with no content are skipped.
+function collectCards() {
+    const cardRows = cardsContainer.querySelectorAll('.card-row');
+    const cards = [];
+
+    cardRows.forEach(cardRow => {
+        const colorHex = cardRow.querySelector('.card-color').value;
+        const accentColor = parseInt(colorHex.replace('#', ''), 16);
+        const blocks = collectBlocksFrom(cardRow.querySelector('.card-blocks'));
+
+        if (blocks.length) {
+            cards.push({ accent_color: accentColor, blocks });
+        }
+    });
+
+    return cards;
+}
+
+// On-the-fly preview: rebuilds each card as its own bordered box, stacked
+// with a gap (no divider line) — matching how Components V2 renders them.
+function updatePreview() {
+    if (!previewCards) return;
+    previewCards.innerHTML = '';
+
+    const cards = collectCards();
+
+    if (!cards.length) {
+        const hint = document.createElement('p');
+        hint.className = 'text-gray-500 text-sm italic';
+        hint.textContent = 'Add a card to see a preview...';
+        previewCards.appendChild(hint);
+        return;
+    }
+
+    cards.forEach(card => {
+        const cardEl = document.createElement('div');
+        cardEl.className = 'bg-[#2b2d31] rounded-lg p-4 border-l-4';
+        cardEl.style.borderColor = `#${card.accent_color.toString(16).padStart(6, '0')}`;
+
+        card.blocks.forEach(block => {
+            if (block.type === 'text') {
+                const p = document.createElement('p');
+                p.className = 'text-gray-300 text-sm whitespace-pre-line break-words mb-2 last:mb-0';
+                p.textContent = block.content;
+                cardEl.appendChild(p);
+
+            } else if (block.type === 'image') {
+                const src = block.attachment ? `/embed-images/${block.attachment}` : block.url;
+                if (src) {
+                    const img = document.createElement('img');
+                    img.src = src;
+                    img.alt = '';
+                    img.className = 'rounded max-w-full max-h-64 object-cover mb-2 last:mb-0';
+                    cardEl.appendChild(img);
+                }
+            }
+        });
+
+        previewCards.appendChild(cardEl);
+    });
 }
 
 // Sending JSON to FastAPI
 async function saveEmbed() {
-    const fileName = document.getElementById('fileName').value.trim();
+    const fileName = elFileName.value.trim();
     const statusMsg = document.getElementById('statusMsg');
 
     if (!fileName) {
@@ -38,16 +333,15 @@ async function saveEmbed() {
         return;
     }
 
-    const decColor = parseInt(elColor.value.replace('#', ''), 16);
+    const cards = collectCards();
+    if (!cards.length) {
+        alert('Add at least one card with content before saving');
+        return;
+    }
 
     const embedPayload = {
         filename: fileName,
-        embed: {
-            title: elTitle.value,
-            description: elDesc.value,
-            color: decColor,
-            footer: elFooter.value ? { text: elFooter.value } : null
-        }
+        embed: { cards }
     };
 
     try {

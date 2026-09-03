@@ -72,32 +72,19 @@
                 <hr class="border-[#3f4147]">
 
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.title }}
-                    </label>
-                    <input type="text" id="title" placeholder=" {{ t.embed_builder.title_content }} "
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.description
-                        }} </label>
-                    <textarea id="description" rows="5" placeholder=" {{ t.embed_builder.description_content }} "
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition"></textarea>
-                </div>
-
-                <div class="flex gap-4">
-                    <div class="w-1/2">
-                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.stripe
-                            }} </label>
-                        <input type="color" id="color" value="#5865f2"
-                            class="w-full h-10 bg-[#1e1f22] border border-[#3f4147] rounded cursor-pointer p-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-xs font-bold text-gray-400 uppercase"> {{ t.embed_builder.cards }}
+                        </label>
+                        <button type="button" onclick="addCard()"
+                            class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold">
+                            {{ t.embed_builder.add_card }}
+                        </button>
                     </div>
-                    <div class="w-1/2">
-                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.footer
-                            }} </label>
-                        <input type="text" id="footer" placeholder=" {{ t.embed_builder.footer_content }} "
-                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                    </div>
+                    <p class="text-[11px] text-gray-500 mb-2">{{ t.embed_builder.cards_hint }}</p>
+                    <div id="cardsContainer" class="space-y-3"></div>
+                    <p id="cardsEmptyHint" class="text-[11px] text-gray-500 mt-2">
+                        {{ t.embed_builder.cards_empty_hint }}
+                    </p>
                 </div>
 
                 <button onclick="saveEmbed()"
@@ -131,14 +118,9 @@
                                 t.embed_builder.preview.bot }} </span>
                         </div>
 
-                        <!-- EMBED CARD -->
-                        <div id="embedCard"
-                            class="mt-2 bg-[#2b2d31] rounded p-4 max-w-md border-l-4 embed-card-default">
-                            <h3 id="pvTitle" class="font-bold text-white text-base mb-1 break-words"> {{
-                                t.embed_builder.preview.title }} </h3>
-                            <p id="pvDesc" class="text-gray-300 text-sm whitespace-pre-line mb-2 break-words"> {{
-                                t.embed_builder.preview.description }} </p>
-                            <p id="pvFooter" class="text-gray-400 text-xs mt-2 hidden break-words"></p>
+                        <!-- LAYOUT PREVIEW: multiple independent cards, one Discord message -->
+                        <div id="previewCards" class="mt-2 max-w-md space-y-2">
+                            <p class="text-gray-500 text-sm italic">{{ t.embed_builder.preview.empty }}</p>
                         </div>
                     </div>
                 </div>

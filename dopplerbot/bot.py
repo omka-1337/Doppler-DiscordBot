@@ -2,13 +2,17 @@ import discord
 import asyncio
 import os
 import logging
+import math
 import traceback
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
 from dopplerbot.database import init_db, get_settings, get_settings_by_category, close_db, get_music_bot
 
 load_dotenv()
+
+STARTED_AT = datetime.now(timezone.utc)
 
 COG_EXTENSIONS = [
     "dopplerbot.cogs.cogmanager",
@@ -122,12 +126,29 @@ async def handle_toggle_music_bot(request):
 
 # ---------------------------------------------------------------------
 
+# BOT STATS FOR THE WEB DASHBOARD
+async def handle_stats(request):
+    uptime_seconds = (datetime.now(timezone.utc) - STARTED_AT).total_seconds()
+
+    return web.json_response({
+        "started_at": STARTED_AT.isoformat(),
+        "uptime_seconds": uptime_seconds,
+        "guild_count": len(bot.guilds),
+        "latency_ms": round(bot.latency * 1000) if not math.isnan(bot.latency) else None,
+        "connected": not bot.is_closed(),
+    })
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
     app.router.add_post("/internal/toggle-cog", handle_reload_cog)
     app.router.add_post("/internal/toggle-music-bot", handle_toggle_music_bot)
-    runner = web.AppRunner(app)
+    app.router.add_get("/internal/stats", handle_stats)
+    # This API is only polled internally (e.g. every few seconds by the dashboard's
+    # stats tab) — per-request access logs here are just noise in latest.log.
+    runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8001)
     await site.start()

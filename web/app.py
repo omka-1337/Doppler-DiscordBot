@@ -4,11 +4,12 @@ import json
 import os
 import uuid
 import httpx
+import psutil
 
 from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -38,6 +39,12 @@ EMBED_IMAGE_ALLOWED_EXT = {".png", ".jpg", ".jpeg"}
 
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
+
+LOG_PATH = BASE_DIR / "latest.log"
+
+# Primes psutil's internal sample so the first /api/stats call already has a
+# meaningful (non-blocking) delta to compare against.
+psutil.cpu_percent()
 
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 app.mount("/embed-images", StaticFiles(directory=EMBED_IMAGES_DIR), name="embed-images")
@@ -363,3 +370,73 @@ async def set_youtube_oauth(payload: YouTubeOAuthPayload):
 async def schedule_restart():
     await asyncio.sleep(1)
     os._exit(0)
+
+# ---------------------------------------------------------------------
+
+# DASHBOARD STATS (host CPU/RAM + the bot process's own uptime/latency)
+@app.get("/api/stats")
+async def get_stats():
+    mem = psutil.virtual_memory()
+
+    stats = {
+        "cpu_percent": psutil.cpu_percent(),
+        "memory_percent": mem.percent,
+        "memory_used_mb": round(mem.used / (1024 * 1024)),
+        "memory_total_mb": round(mem.total / (1024 * 1024)),
+        "bot": None,
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://doppler_discord_bot:8001/internal/stats", timeout=3.0)
+            if response.status_code == 200:
+                stats["bot"] = response.json()
+    except Exception as e:
+        print(f"Failed to fetch bot stats: {e}")
+
+    return JSONResponse(stats)
+
+# ---------------------------------------------------------------------
+
+# LIVE LOG STREAM
+# Tails latest.log (shared with the bot container via the same bind mount)
+# and pushes new lines to the browser over a WebSocket.
+@app.websocket("/ws/logs")
+async def stream_logs(websocket: WebSocket):
+    await websocket.accept()
+
+    try:
+        last_size = 0
+
+        if LOG_PATH.exists():
+            with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()[-200:]
+            if lines:
+                await websocket.send_text("\n".join(line.rstrip("\n") for line in lines))
+            last_size = LOG_PATH.stat().st_size
+
+        while True:
+            await asyncio.sleep(1)
+
+            if not LOG_PATH.exists():
+                continue
+
+            current_size = LOG_PATH.stat().st_size
+
+            # The bot's logging.FileHandler is opened in "w" mode, so a bot
+            # restart truncates the file — treat a shrink as "start over".
+            if current_size < last_size:
+                last_size = 0
+
+            if current_size > last_size:
+                with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+                    f.seek(last_size)
+                    new_content = f.read()
+                last_size = current_size
+
+                new_lines = [line for line in new_content.splitlines() if line.strip()]
+                if new_lines:
+                    await websocket.send_text("\n".join(new_lines))
+
+    except WebSocketDisconnect:
+        pass

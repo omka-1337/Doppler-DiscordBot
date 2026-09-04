@@ -3,9 +3,20 @@
         "dashboard": "Dashboard"
     },
     "tabs": {
+        "stats": "📊 Stats",
         "embed_builder": "🛠️ Embed Builder",
         "modules": "🧩 Modules",
         "settings": "⚙️ Settings"
+    },
+    "stats": {
+        "status": "Status",
+        "uptime": "Uptime",
+        "guilds": "Guilds",
+        "latency": "Latency",
+        "cpu": "CPU (host)",
+        "ram": "RAM (host)",
+        "live_logs": "Live logs",
+        "connecting": "Connecting..."
     },
     "embed_builder": {
         "tab_title": "🛠️ Embed builder",

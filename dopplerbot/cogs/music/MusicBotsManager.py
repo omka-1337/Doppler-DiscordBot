@@ -151,7 +151,7 @@ class MusicBotsManager(commands.Cog):
             logging.error(f"Invalid token for music bot {bot_rowid}.")
             self.running_bots.pop(bot_rowid, None)
         except Exception as e:
-            logging.error(f"Error running music bot {bot_rowid}: {e}")
+            logging.error(f"Error running music bot {bot_rowid}: {e}", exc_info=True)
             self.running_bots.pop(bot_rowid, None)
 
 # -------------------------------------------------------------------------------

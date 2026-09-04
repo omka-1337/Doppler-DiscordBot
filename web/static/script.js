@@ -543,12 +543,150 @@ function toggleTranslatorProviderFields() {
 }
 
 // ---------------------------------------------------------------------
+// DASHBOARD STATS (uptime / CPU / RAM)
+
+function formatUptime(totalSeconds) {
+    const s = Math.floor(totalSeconds);
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const seconds = s % 60;
+
+    const parts = [];
+    if (days) parts.push(`${days}d`);
+    if (hours || days) parts.push(`${hours}h`);
+    if (minutes || hours || days) parts.push(`${minutes}m`);
+    parts.push(`${seconds}s`);
+    return parts.join(' ');
+}
+
+async function refreshStats() {
+    try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) throw new Error('Failed to fetch stats');
+        const data = await res.json();
+
+        const cpuValue = document.getElementById('statCpuValue');
+        const cpuBar = document.getElementById('statCpuBar');
+        if (cpuValue && cpuBar) {
+            cpuValue.textContent = `${data.cpu_percent.toFixed(1)}%`;
+            cpuBar.style.width = `${Math.min(data.cpu_percent, 100)}%`;
+        }
+
+        const ramValue = document.getElementById('statRamValue');
+        const ramBar = document.getElementById('statRamBar');
+        if (ramValue && ramBar) {
+            ramValue.textContent = `${data.memory_used_mb} / ${data.memory_total_mb} MB (${data.memory_percent.toFixed(1)}%)`;
+            ramBar.style.width = `${Math.min(data.memory_percent, 100)}%`;
+        }
+
+        const statusDot = document.getElementById('statStatusDot');
+        const statusText = document.getElementById('statStatus');
+        const uptimeEl = document.getElementById('statUptime');
+        const guildsEl = document.getElementById('statGuilds');
+        const latencyEl = document.getElementById('statLatency');
+
+        if (data.bot) {
+            const online = data.bot.connected;
+            if (statusDot) statusDot.className = `w-2.5 h-2.5 rounded-full ${online ? 'bg-green-500' : 'bg-red-500'}`;
+            if (statusText) statusText.textContent = online ? 'Online' : 'Offline';
+            if (uptimeEl) uptimeEl.textContent = formatUptime(data.bot.uptime_seconds);
+            if (guildsEl) guildsEl.textContent = data.bot.guild_count;
+            if (latencyEl) latencyEl.textContent = data.bot.latency_ms !== null ? `${data.bot.latency_ms} ms` : '—';
+        } else {
+            if (statusDot) statusDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+            if (statusText) statusText.textContent = 'Unreachable';
+            if (uptimeEl) uptimeEl.textContent = '—';
+            if (guildsEl) guildsEl.textContent = '—';
+            if (latencyEl) latencyEl.textContent = '—';
+        }
+    } catch (err) {
+        console.error('Error fetching stats:', err);
+    }
+}
+
+function initStats() {
+    if (!document.getElementById('statCpuValue')) return;
+    refreshStats();
+    setInterval(refreshStats, 3000);
+}
+
+// ---------------------------------------------------------------------
+// LIVE LOGS (WebSocket; auto-follows the tail unless the user scrolled up)
+
+const LOG_LEVEL_COLORS = {
+    ERROR: 'text-red-400',
+    WARNING: 'text-yellow-400',
+    INFO: 'text-gray-300',
+};
+
+function appendLogLine(panel, line) {
+    const div = document.createElement('div');
+
+    let colorClass = 'text-gray-300';
+    for (const [level, cls] of Object.entries(LOG_LEVEL_COLORS)) {
+        if (line.includes(`[${level}]`)) {
+            colorClass = cls;
+            break;
+        }
+    }
+    div.className = colorClass;
+    div.textContent = line;
+    panel.appendChild(div);
+
+    // Cap the number of rendered lines so the DOM doesn't grow forever.
+    while (panel.children.length > 500) {
+        panel.removeChild(panel.firstChild);
+    }
+}
+
+function connectLogsWebSocket() {
+    const panel = document.getElementById('logsPanel');
+    const dot = document.getElementById('logsConnDot');
+    const label = document.getElementById('logsConnLabel');
+    if (!panel) return;
+
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/logs`);
+
+    ws.onopen = () => {
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-green-500';
+        if (label) label.textContent = 'Live';
+    };
+
+    ws.onmessage = (event) => {
+        // Near-bottom scroll means "follow the tail"; otherwise leave the user's scroll position alone.
+        const wasNearBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40;
+
+        event.data.split('\n').forEach(line => {
+            if (line) appendLogLine(panel, line);
+        });
+
+        if (wasNearBottom) {
+            panel.scrollTop = panel.scrollHeight;
+        }
+    };
+
+    ws.onclose = () => {
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-red-500';
+        if (label) label.textContent = 'Disconnected — retrying...';
+        setTimeout(connectLogsWebSocket, 3000);
+    };
+
+    ws.onerror = () => {
+        ws.close();
+    };
+}
+
+// ---------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
     loadMusicBots();
     toggleTranslatorProviderFields();
     loadYouTubeOAuthStatus();
+    initStats();
+    connectLogsWebSocket();
 
 });
 

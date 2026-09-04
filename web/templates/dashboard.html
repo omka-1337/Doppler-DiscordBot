@@ -35,8 +35,12 @@
 
         <!-- NAV BAR SWITCH BUTTONS -->
         <div class="flex gap-2">
-            <button onclick="switchTab('embeds')" id="btn-embeds"
+            <button onclick="switchTab('stats')" id="btn-stats"
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition bg-indigo-600 text-white">
+                {{ t.tabs.stats }}
+            </button>
+            <button onclick="switchTab('embeds')" id="btn-embeds"
+                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
                 {{ t.tabs.embed_builder }}
             </button>
             <button onclick="switchTab('cogs')" id="btn-cogs"
@@ -53,8 +57,71 @@
     <!-- MAIN FUNCTIONS -->
     <main class="max-w-6xl mx-auto px-6 pb-12">
 
+        <!-- 0. TAB: STATS (default) -->
+        <div id="tab-stats" class="tab-content space-y-6">
+
+            <!-- Quick stat cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                    <span class="block text-[10px] font-bold text-gray-400 uppercase mb-1">{{ t.stats.status }}</span>
+                    <div class="flex items-center gap-2">
+                        <span id="statStatusDot" class="w-2.5 h-2.5 rounded-full bg-gray-500"></span>
+                        <span id="statStatus" class="text-lg font-bold text-white">—</span>
+                    </div>
+                </div>
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                    <span class="block text-[10px] font-bold text-gray-400 uppercase mb-1">{{ t.stats.uptime }}</span>
+                    <span id="statUptime" class="text-lg font-bold text-white">—</span>
+                </div>
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                    <span class="block text-[10px] font-bold text-gray-400 uppercase mb-1">{{ t.stats.guilds }}</span>
+                    <span id="statGuilds" class="text-lg font-bold text-white">—</span>
+                </div>
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                    <span class="block text-[10px] font-bold text-gray-400 uppercase mb-1">{{ t.stats.latency }}</span>
+                    <span id="statLatency" class="text-lg font-bold text-white">—</span>
+                </div>
+            </div>
+
+            <!-- CPU / RAM bars -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-gray-400 uppercase">{{ t.stats.cpu }}</span>
+                        <span id="statCpuValue" class="text-xs font-bold text-white">—</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-[#1e1f22] rounded-full overflow-hidden">
+                        <div id="statCpuBar" class="h-full bg-indigo-500 transition-all" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-gray-400 uppercase">{{ t.stats.ram }}</span>
+                        <span id="statRamValue" class="text-xs font-bold text-white">—</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-[#1e1f22] rounded-full overflow-hidden">
+                        <div id="statRamBar" class="h-full bg-indigo-500 transition-all" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live logs -->
+            <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">{{ t.stats.live_logs }}</h2>
+                    <div class="flex items-center gap-2">
+                        <span id="logsConnDot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                        <span id="logsConnLabel" class="text-[10px] text-gray-400">{{ t.stats.connecting }}</span>
+                    </div>
+                </div>
+                <div id="logsPanel"
+                    class="bg-[#1e1f22] border border-[#3f4147] rounded p-3 h-96 overflow-y-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
+                </div>
+            </div>
+        </div>
+
         <!-- 1. TAB: EMBED BUILDER -->
-        <div id="tab-embeds" class="tab-content grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div id="tab-embeds" class="tab-content hidden grid grid-cols-1 md:grid-cols-2 gap-8">
 
             <!-- LEFT COLUMN: FORM -->
             <div class="bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
@@ -72,32 +139,19 @@
                 <hr class="border-[#3f4147]">
 
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.title }}
-                    </label>
-                    <input type="text" id="title" placeholder=" {{ t.embed_builder.title_content }} "
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.description
-                        }} </label>
-                    <textarea id="description" rows="5" placeholder=" {{ t.embed_builder.description_content }} "
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition"></textarea>
-                </div>
-
-                <div class="flex gap-4">
-                    <div class="w-1/2">
-                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.stripe
-                            }} </label>
-                        <input type="color" id="color" value="#5865f2"
-                            class="w-full h-10 bg-[#1e1f22] border border-[#3f4147] rounded cursor-pointer p-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-xs font-bold text-gray-400 uppercase"> {{ t.embed_builder.cards }}
+                        </label>
+                        <button type="button" onclick="addCard()"
+                            class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold">
+                            {{ t.embed_builder.add_card }}
+                        </button>
                     </div>
-                    <div class="w-1/2">
-                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.footer
-                            }} </label>
-                        <input type="text" id="footer" placeholder=" {{ t.embed_builder.footer_content }} "
-                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                    </div>
+                    <p class="text-[11px] text-gray-500 mb-2">{{ t.embed_builder.cards_hint }}</p>
+                    <div id="cardsContainer" class="space-y-3"></div>
+                    <p id="cardsEmptyHint" class="text-[11px] text-gray-500 mt-2">
+                        {{ t.embed_builder.cards_empty_hint }}
+                    </p>
                 </div>
 
                 <button onclick="saveEmbed()"
@@ -131,14 +185,9 @@
                                 t.embed_builder.preview.bot }} </span>
                         </div>
 
-                        <!-- EMBED CARD -->
-                        <div id="embedCard"
-                            class="mt-2 bg-[#2b2d31] rounded p-4 max-w-md border-l-4 embed-card-default">
-                            <h3 id="pvTitle" class="font-bold text-white text-base mb-1 break-words"> {{
-                                t.embed_builder.preview.title }} </h3>
-                            <p id="pvDesc" class="text-gray-300 text-sm whitespace-pre-line mb-2 break-words"> {{
-                                t.embed_builder.preview.description }} </p>
-                            <p id="pvFooter" class="text-gray-400 text-xs mt-2 hidden break-words"></p>
+                        <!-- LAYOUT PREVIEW: multiple independent cards, one Discord message -->
+                        <div id="previewCards" class="mt-2 max-w-md space-y-2">
+                            <p class="text-gray-500 text-sm italic">{{ t.embed_builder.preview.empty }}</p>
                         </div>
                     </div>
                 </div>
@@ -172,6 +221,14 @@
                     <button onclick="switchModuleCategory('Music')" id="mod-btn-Music"
                         class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
                         {{ t.modules.tab3 }}
+                    </button>
+                    <button onclick="switchModuleCategory('Moderation')" id="mod-btn-Moderation"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.modules.tab4 }}
+                    </button>
+                    <button onclick="switchModuleCategory('Translator')" id="mod-btn-Translator"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        📑 Translator
                     </button>
                 </div>
             </div>
@@ -207,7 +264,7 @@
                         t.modules.ai_settings.name
                         }} </label>
                     <input type="text" name="ai_bot_name" id="set_ai_bot_name"
-                        value="{{ settings_ai.get('ai_bot_name', 'Kishka AI') }}"
+                        value="{{ settings_ai.get('ai_bot_name', 'Kara AI') }}"
                         class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
                 </div>
 
@@ -346,6 +403,69 @@
                 </div>
             </form>
 
+            <!-- MODULE: MODERATION SETTINGS -->
+            <form id="form-module-Moderation" onsubmit="saveSettings(event, 'Moderation')"
+                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.moderation.thumbler1_title }} </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.moderation.thumbler1_description }}
+                        </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_moderation_enabled" {% if
+                            settings_modules.get('moderation', 'true' )=='true' %}checked{% endif %}
+                            onchange="toggleModule('moderation', this.checked)" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    {{ t.modules.moderation.title }} </h3>
+
+                <!-- Mod Log Enabled Toggle -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded border border-[#3f4147]">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.moderation.thumbler2_title }} </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.moderation.thumbler2_description }}
+                        </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="mod_log_enabled" id="chk_mod_log_enabled" {% if
+                            settings_moderation.get('mod_log_enabled', 'true' )=='true' %}checked{% endif %}
+                            class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.moderation.field1_title }}
+                    </label>
+                    <input type="text" name="mod_log_channel_id" id="set_mod_log_channel_id"
+                        value="{{ settings_moderation.get('mod_log_channel_id', '0') }}"
+                        placeholder="Sample: 123456789012345678"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.moderation.field1_description }} </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.modules.moderation.save }}
+                    </button>
+                </div>
+            </form>
+
             <!-- MODULE: MUSIC SETTINGS -->
             <form id="form-module-Music" onsubmit="saveSettings(event, 'Music')"
                 class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
@@ -400,6 +520,82 @@
 
                 <div class="pt-2">
                     <button type="button" onclick="saveMusicBot(1)"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        Save Module Settings
+                    </button>
+                </div>
+            </form>
+
+            <!-- MODULE: TRANSLATOR SETTINGS -->
+            <form id="form-module-Translator" onsubmit="saveSettings(event, 'Translator')"
+                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase">Translator Module Status</span>
+                        <span class="text-[10px] text-gray-400">Enable or disable message translation (right-click →
+                            Apps → Translate)</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_translator_enabled" {% if
+                            settings_modules.get('translator', 'true' )=='true' %}checked{% endif %}
+                            onchange="toggleModule('translator', this.checked)" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    Translation Provider</h3>
+
+                <!-- Provider Dropdown -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Preferred Provider</label>
+                    <select name="translator_provider" id="set_translator_provider"
+                        onchange="toggleTranslatorProviderFields()"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                        <option value="google" {% if settings_translator.get('translator_provider', 'google' )=='google'
+                            %}selected{% endif %}>Google Translate</option>
+                        <option value="deepl" {% if settings_translator.get('translator_provider')=='deepl' %}selected{%
+                            endif %}>DeepL</option>
+                    </select>
+                    <p class="text-[11px] text-gray-400 mt-1">If DeepL is selected but no API key is set below, the bot
+                        automatically falls back to Google.</p>
+                </div>
+
+                <!-- DeepL API Key -->
+                <div id="translator-deepl-key-block">
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">DeepL API Key</label>
+                    <div class="relative group">
+                        <input type="password" name="translator_deepl_api_key" id="set_translator_deepl_api_key"
+                            value="{{ settings_translator.get('translator_deepl_api_key', '') }}"
+                            placeholder="Enter DeepL API key..." onmouseenter="this.type='text'"
+                            onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1">Leave empty to disable DeepL (falls back to Google).</p>
+                </div>
+
+                <!-- Google Cloud API Key -->
+                <div id="translator-google-key-block">
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Google Cloud Translate API
+                        Key</label>
+                    <div class="relative group">
+                        <input type="password" name="translator_google_api_key" id="set_translator_google_api_key"
+                            value="{{ settings_translator.get('translator_google_api_key', '') }}"
+                            placeholder="Enter Google Cloud API key..." onmouseenter="this.type='text'"
+                            onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1">Leave empty to use the free, keyless translation library
+                        instead.</p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
                         class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
                         Save Module Settings
                     </button>

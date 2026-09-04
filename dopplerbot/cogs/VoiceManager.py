@@ -3,7 +3,7 @@
 import asyncio
 import discord
 from discord.ext import commands
-from database import get_settings_by_category, get_all_temp_channels, add_temp_channel, remove_temp_channel
+from dopplerbot.database import get_settings_by_category, get_all_temp_channels, add_temp_channel, remove_temp_channel
 
 
 class VoiceManager(commands.Cog):

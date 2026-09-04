@@ -9,4 +9,4 @@ latest.log
 .venv
 .vscode
 .env
-bot.db
+savedata/

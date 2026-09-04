@@ -7,7 +7,7 @@ import os
 
 from typing import Dict
 from discord.ext import commands
-from database import get_all_music_bots, update_music_bot
+from dopplerbot.database import get_all_music_bots, update_music_bot
 
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
@@ -151,7 +151,7 @@ class MusicBotsManager(commands.Cog):
             logging.error(f"Invalid token for music bot {bot_rowid}.")
             self.running_bots.pop(bot_rowid, None)
         except Exception as e:
-            logging.error(f"Error running music bot {bot_rowid}: {e}")
+            logging.error(f"Error running music bot {bot_rowid}: {e}", exc_info=True)
             self.running_bots.pop(bot_rowid, None)
 
 # -------------------------------------------------------------------------------

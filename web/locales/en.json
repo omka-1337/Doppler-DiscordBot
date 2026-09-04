@@ -3,27 +3,35 @@
         "dashboard": "Dashboard"
     },
     "tabs": {
+        "stats": "📊 Stats",
         "embed_builder": "🛠️ Embed Builder",
         "modules": "🧩 Modules",
         "settings": "⚙️ Settings"
     },
+    "stats": {
+        "status": "Status",
+        "uptime": "Uptime",
+        "guilds": "Guilds",
+        "latency": "Latency",
+        "cpu": "CPU (host)",
+        "ram": "RAM (host)",
+        "live_logs": "Live logs",
+        "connecting": "Connecting..."
+    },
     "embed_builder": {
         "tab_title": "🛠️ Embed builder",
         "name": "File name",
-        "title": "Title",
-        "title_content": "Here title",
-        "description": "Description",
-        "description_content": "Here description",
-        "footer": "Footer",
-        "footer_content": "Here footer",
-        "stripe": "Stripe color",
+        "cards": "Cards",
+        "add_card": "+ Add card",
+        "cards_hint": "Each card is its own independent block (own color, own text/images). All cards are sent as one Discord message.",
+        "cards_empty_hint": "Add a card to start building the message.",
+        "add_text": "📝 Add text",
+        "add_image": "🖼️ Add image",
         "save": "💾 Save JSON",
         "preview": {
             "bot": "Bot",
             "p_title": "Prewiev",
-            "title": "Macarena",
-            "description": "Dale a tu cuerpo alegría Macarena\nA Que tu cuerpo es pa' darle alegría y cosa buena\nA Dale a tu cuerpo alegría, Macarena\nA Hey Macarena, ay",
-            "footer": "Los Del Río"
+            "empty": "Add a card to see a preview..."
         }
     },
     "modules": {
@@ -32,6 +40,7 @@
         "tab1": "🤖 AI Settings",
         "tab2": "🔊 Voice Manager",
         "tab3": "📻 Music",
+        "tab4": "🛡️ Moderation",
         "ai_settings": {
             "title": "AI Persona Settings",
             "name": "The Name of bot",
@@ -54,6 +63,16 @@
             "field1_description": "A room where, upon entering, the bot will create a private channel and move the user there.",
             "field2_title": "Category ID for new rooms",
             "field2_description": "The category in which temporary voice channels will be created.",
+            "save": "💾 Save settings"
+        },
+        "moderation": {
+            "title": "Moderation Settings",
+            "thumbler1_title": "Enable Moderation Module",
+            "thumbler1_description": "Toggle moderation commands (kick, ban, timeout, warn) on or off",
+            "thumbler2_title": "Enable Mod Log",
+            "thumbler2_description": "Send a log message to the channel below for every moderation action",
+            "field1_title": "Mod Log Channel ID",
+            "field1_description": "The channel where kick/ban/timeout/warn actions will be logged.",
             "save": "💾 Save settings"
         }
     },

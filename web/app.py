@@ -1,20 +1,22 @@
-from database import update_music_bot, add_music_bot, remove_music_bot, get_all_music_bots
+from dopplerbot.database import update_music_bot, add_music_bot, remove_music_bot, get_all_music_bots
 import asyncio
 import json
 import os
+import uuid
 import httpx
+import psutil
 
 from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from utils.i18n import get_translations
 
-from database import get_settings_by_category, set_settings
+from dopplerbot.database import get_settings_by_category, set_settings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -26,13 +28,26 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 app = FastAPI(title="Bot Dashboard")
 
-EMBEDS_DIR = BASE_DIR / "embeds"
-EMBEDS_DIR.mkdir(exist_ok=True)
+EMBEDS_DIR = BASE_DIR / "savedata" / "embeds"
+EMBEDS_DIR.mkdir(parents=True, exist_ok=True)
+
+EMBED_IMAGES_DIR = EMBEDS_DIR / "images"
+EMBED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+EMBED_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+EMBED_IMAGE_ALLOWED_EXT = {".png", ".jpg", ".jpeg"}
 
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
+LOG_PATH = BASE_DIR / "latest.log"
+
+# Primes psutil's internal sample so the first /api/stats call already has a
+# meaningful (non-blocking) delta to compare against.
+psutil.cpu_percent()
+
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+app.mount("/embed-images", StaticFiles(directory=EMBED_IMAGES_DIR), name="embed-images")
 
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
 
@@ -75,6 +90,8 @@ async def get_dashboard(request: Request):
     settings_ai = await get_settings_by_category("AI")
     settings_voice = await get_settings_by_category("Voice")
     settings_modules = await get_settings_by_category("Modules")
+    settings_moderation = await get_settings_by_category("Moderation")
+    settings_translator = await get_settings_by_category("Translator")
 
     t = get_translations("en")
 
@@ -88,6 +105,8 @@ async def get_dashboard(request: Request):
             "settings_ai": settings_ai,
             "settings_voice": settings_voice,
             "settings_modules": settings_modules,
+            "settings_moderation": settings_moderation,
+            "settings_translator": settings_translator,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "gemini_key": os.getenv("GEMINI_API_KEY", "")
         }
@@ -114,6 +133,30 @@ async def save_embed(payload: EmbedPayload):
         return {"status": "success", "message": f"The template has been saved as {clean_filename}.json"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---------------------------------------------------------------------
+
+# UPLOAD IMAGE FOR EMBED
+# Stored under savedata/embeds/images/ and served locally for the dashboard preview.
+# The bot attaches the file directly when sending (see cogs/embed.py), so this works
+# even without a public URL for the dashboard.
+@app.post("/api/upload-embed-image")
+async def upload_embed_image(file: UploadFile = File(...)):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in EMBED_IMAGE_ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail="Only PNG/JPG images are allowed")
+
+    contents = await file.read()
+    if len(contents) > EMBED_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Image must be smaller than 8MB")
+
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+    dest = EMBED_IMAGES_DIR / safe_name
+
+    with open(dest, "wb") as f:
+        f.write(contents)
+
+    return {"status": "ok", "filename": safe_name}
 
 # ---------------------------------------------------------------------
 
@@ -178,9 +221,11 @@ async def save_settings(request: Request):
 # ---------------------------------------------------------------------
 
 MODULE_TOGGLE_MAP = {
-    "ai": ("cogs.ai.GeminiChat", "AI", "ai_enabled"),
-    "voice": ("cogs.VoiceManager", "Voice", "voice_enabled"),
-    "music": ("cogs.music.MusicBotsManager", "Modules", "music_bots"),
+    "ai": ("dopplerbot.cogs.ai.GeminiChat", "AI", "ai_enabled"),
+    "voice": ("dopplerbot.cogs.VoiceManager", "Voice", "voice_enabled"),
+    "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
+    "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
+    "translator": ("dopplerbot.cogs.Translator", "Modules", "translator"),
 }
 
 class ModuleTogglePayload(BaseModel):
@@ -201,7 +246,7 @@ async def toggle_module(payload: ModuleTogglePayload):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://kishka_discord_bot:8001/internal/toggle-cog",
+                "http://doppler_discord_bot:8001/internal/toggle-cog",
                 json={"cog": cog_path, "action": action},
                 timeout=5.0
             )
@@ -270,7 +315,7 @@ async def notify_music_bot(bot_rowid: int, action: str) -> bool:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://kishka_discord_bot:8001/internal/toggle-music-bot",
+                "http://doppler_discord_bot:8001/internal/toggle-music-bot",
                 json={"bot_rowid": bot_rowid, "action": action},
                 timeout=5.0
             )
@@ -325,3 +370,73 @@ async def set_youtube_oauth(payload: YouTubeOAuthPayload):
 async def schedule_restart():
     await asyncio.sleep(1)
     os._exit(0)
+
+# ---------------------------------------------------------------------
+
+# DASHBOARD STATS (host CPU/RAM + the bot process's own uptime/latency)
+@app.get("/api/stats")
+async def get_stats():
+    mem = psutil.virtual_memory()
+
+    stats = {
+        "cpu_percent": psutil.cpu_percent(),
+        "memory_percent": mem.percent,
+        "memory_used_mb": round(mem.used / (1024 * 1024)),
+        "memory_total_mb": round(mem.total / (1024 * 1024)),
+        "bot": None,
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://doppler_discord_bot:8001/internal/stats", timeout=3.0)
+            if response.status_code == 200:
+                stats["bot"] = response.json()
+    except Exception as e:
+        print(f"Failed to fetch bot stats: {e}")
+
+    return JSONResponse(stats)
+
+# ---------------------------------------------------------------------
+
+# LIVE LOG STREAM
+# Tails latest.log (shared with the bot container via the same bind mount)
+# and pushes new lines to the browser over a WebSocket.
+@app.websocket("/ws/logs")
+async def stream_logs(websocket: WebSocket):
+    await websocket.accept()
+
+    try:
+        last_size = 0
+
+        if LOG_PATH.exists():
+            with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()[-200:]
+            if lines:
+                await websocket.send_text("\n".join(line.rstrip("\n") for line in lines))
+            last_size = LOG_PATH.stat().st_size
+
+        while True:
+            await asyncio.sleep(1)
+
+            if not LOG_PATH.exists():
+                continue
+
+            current_size = LOG_PATH.stat().st_size
+
+            # The bot's logging.FileHandler is opened in "w" mode, so a bot
+            # restart truncates the file — treat a shrink as "start over".
+            if current_size < last_size:
+                last_size = 0
+
+            if current_size > last_size:
+                with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+                    f.seek(last_size)
+                    new_content = f.read()
+                last_size = current_size
+
+                new_lines = [line for line in new_content.splitlines() if line.strip()]
+                if new_lines:
+                    await websocket.send_text("\n".join(new_lines))
+
+    except WebSocketDisconnect:
+        pass

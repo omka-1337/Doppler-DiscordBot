@@ -4,7 +4,7 @@ import logging
 
 from typing import cast
 from typing import Literal
-from cogs.music.MusicBotsManager import MusicBotsManager
+from dopplerbot.cogs.music.MusicBotsManager import MusicBotsManager
 from utils.music.MusicPlayer import MusicPlayer
 from discord.ext import commands
 from discord import app_commands

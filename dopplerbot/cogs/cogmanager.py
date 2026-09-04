@@ -1,6 +1,6 @@
 #COG MANAGER
 
-from database import set_settings
+from dopplerbot.database import set_settings
 import discord
 from discord.ext import commands
 from pathlib import Path
@@ -8,7 +8,7 @@ from pathlib import Path
 class CogManager(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.cogs_dir = Path("cogs")
+        self.cogs_dir = Path(__file__).resolve().parent
 
         # SET COG STATUS
         async def toggle_cog_module(bot, cog_name: str, db_key: str, enable: bool):
@@ -43,7 +43,7 @@ class CogManager(commands.Cog):
             rel_path = file.relative_to(self.cogs_dir).with_suffix("")
             module_path = ".".join(rel_path.parts)
 
-            extension_name = f"cogs.{module_path}"
+            extension_name = f"dopplerbot.cogs.{module_path}"
 
             status = "🟢" if extension_name in self.bot.extensions else "🔴"
 
@@ -62,7 +62,7 @@ class CogManager(commands.Cog):
         try:
             if not path.is_file():
                 raise commands.ExtensionNotFound(f"{cog_name}.py does not exist.")
-            await self.bot.reload_extension(f"cogs.{cog_name}")
+            await self.bot.reload_extension(f"dopplerbot.cogs.{cog_name}")
             embed = discord.Embed(
                 description=f"✅ `{cog_name}` reloaded",
                 color=0x00ff00

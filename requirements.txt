@@ -9,3 +9,7 @@ python-dotenv>=1.2.2
 aiosqlite>=0.22.1
 python-multipart>=0.0.32
 wavelink>=3.4.0
+deepl>=1.32.0
+google-cloud-translate>=3.27.0
+deep-translator>=1.11.4
+psutil>=6.1.0

@@ -3,7 +3,9 @@ import aiosqlite
 import logging
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "bot.db"
+SAVEDATA_DIR = Path(__file__).resolve().parent.parent / "savedata"
+SAVEDATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = SAVEDATA_DIR / "bot.db"
 
 # A single, shared connection for the entire bot process (opening new connections for every request is expensive and doesn't make sense).
 _db: aiosqlite.Connection | None = None
@@ -67,6 +69,7 @@ async def init_db():
         default_settings = [
             # MAIN
             ("prefix", "+", "Main"),
+
             # AI
             ("ai_chat_enabled", "true", "AI"),
             ("ai_bot_name", "Kara AI", "AI"),
@@ -74,14 +77,28 @@ async def init_db():
             ("ai_language", "English", "AI"),
             ("ai_irony", "0.2", "AI"),
             ("ai_seriousness", "0.8", "AI"),
-            ("ai_force_language", "false", "AI"),
+            ("ai_force_language", "true", "AI"),
+
             # VOICEMANAGER
             ("category_id", "0", "Voice"),
             ("main_voice_channel_id", "0", "Voice"),
+
+            # MODERATION
+            ("mod_log_channel_id", "0", "Moderation"),
+            ("mod_log_enabled", "false", "Moderation"),
+
+            # TRANSLATOR
+            ("translator_provider", "google", "Translator"),
+            ("translator_deepl_api_key", "", "Translator"),
+            ("translator_google_api_key", "", "Translator"),
+
             # MODULES
             ("ai_features", "true", "Modules"),
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
+            ("moderation", "true", "Modules"),
+            ("translator", "true", "Modules"),
+
             # MUSIC BOTS
             ("music_bot_id", "", "Music")
         ]

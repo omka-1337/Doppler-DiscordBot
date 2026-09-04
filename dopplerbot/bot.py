@@ -2,18 +2,37 @@ import discord
 import asyncio
 import os
 import logging
+import math
 import traceback
-from pathlib import Path
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
-from database import init_db, get_settings, get_settings_by_category, close_db, get_music_bot
+from dopplerbot.database import init_db, get_settings, get_settings_by_category, close_db, get_music_bot
 
 load_dotenv()
 
+STARTED_AT = datetime.now(timezone.utc)
+
+COG_EXTENSIONS = [
+    "dopplerbot.cogs.cogmanager",
+    "dopplerbot.cogs.embed",
+    "dopplerbot.cogs.web_command",
+    "dopplerbot.cogs.Translator",
+    "dopplerbot.cogs.VoiceManager",
+    "dopplerbot.cogs.music.MusicBotsManager",
+    "dopplerbot.cogs.music.MusicCommands",
+    "dopplerbot.cogs.ai.GeminiChat",
+    "dopplerbot.cogs.moderation.ModerationCommands",
+]
+
+# Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
 MODULE_CONFIG = {
-    "cogs.ai_functions": ("AI", "ai_enabled"),
-    "cogs.voicemanager": ("Voice", "voice_enabled")
+    "dopplerbot.cogs.ai.GeminiChat": ("AI", "ai_enabled"),
+    "dopplerbot.cogs.VoiceManager": ("Voice", "voice_enabled"),
+    "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
+    "dopplerbot.cogs.moderation.ModerationCommands": ("Modules", "moderation"),
+    "dopplerbot.cogs.Translator": ("Modules", "translator"),
 }
 
 # LOGGING
@@ -107,12 +126,29 @@ async def handle_toggle_music_bot(request):
 
 # ---------------------------------------------------------------------
 
+# BOT STATS FOR THE WEB DASHBOARD
+async def handle_stats(request):
+    uptime_seconds = (datetime.now(timezone.utc) - STARTED_AT).total_seconds()
+
+    return web.json_response({
+        "started_at": STARTED_AT.isoformat(),
+        "uptime_seconds": uptime_seconds,
+        "guild_count": len(bot.guilds),
+        "latency_ms": round(bot.latency * 1000) if not math.isnan(bot.latency) else None,
+        "connected": not bot.is_closed(),
+    })
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
     app.router.add_post("/internal/toggle-cog", handle_reload_cog)
     app.router.add_post("/internal/toggle-music-bot", handle_toggle_music_bot)
-    runner = web.AppRunner(app)
+    app.router.add_get("/internal/stats", handle_stats)
+    # This API is only polled internally (e.g. every few seconds by the dashboard's
+    # stats tab) — per-request access logs here are just noise in latest.log.
+    runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8001)
     await site.start()
@@ -122,39 +158,23 @@ async def start_internal_api():
 
 # COGS LOAD
 async def load_cogs(bot):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    cogs_dir = os.path.join(base_dir, "cogs")
-
-    if not os.path.exists(cogs_dir):
-        logging.error(f"The cogs directory was not found: {cogs_dir}")
-        return
-
     logging.info("Start loading the cogs...")
 
-    for root, _, files in os.walk(cogs_dir):
-        for filename in files:
-            if not filename.endswith(".py") or filename.startswith("__"):
+    for cog_name in COG_EXTENSIONS:
+        if cog_name in MODULE_CONFIG:
+            category, key_name = MODULE_CONFIG[cog_name]
+            cat_settings = await get_settings_by_category(category)
+            is_enabled = cat_settings.get(key_name, "true").lower() == "true"
+
+            if not is_enabled:
+                logging.info(f"Skipped disabled cog: {cog_name}")
                 continue
 
-            full_path = os.path.join(root, filename)
-            rel_path = os.path.relpath(full_path, base_dir)
-
-            cog_name = os.path.splitext(rel_path)[0].replace(os.sep, ".")
-
-            if cog_name in MODULE_CONFIG:
-                category, key_name = MODULE_CONFIG[cog_name]
-                cat_settings = await get_settings_by_category(category)
-                is_enabled = cat_settings.get(key_name, "true").lower() == "true"
-
-                if not is_enabled:
-                    logging.info(f"Skipped disabled cog: {cog_name}")
-                    continue
-
-            try:
-                await bot.load_extension(cog_name)
-                logging.info(f"Loaded: {cog_name}")
-            except Exception as e:
-                logging.error(f"Error in {cog_name}:\n{traceback.format_exc()}")
+        try:
+            await bot.load_extension(cog_name)
+            logging.info(f"Loaded: {cog_name}")
+        except Exception as e:
+            logging.error(f"Error in {cog_name}:\n{traceback.format_exc()}")
 
 # ---------------------------------------------------------------------
 

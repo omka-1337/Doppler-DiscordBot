@@ -1,0 +1,22 @@
+# Version control
+.git
+.gitignore
+
+# Local dev environment
+.venv
+.vscode
+
+# Runtime data (bind-mounted at runtime, never needed in the image itself)
+savedata
+*.db
+latest.log
+
+# Secrets (never baked into an image layer)
+.env
+
+# Python cache
+__pycache__
+*.pyc
+
+# Lavalink config (used by the separate lavalink image, not this one)
+lavalink

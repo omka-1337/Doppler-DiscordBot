@@ -33,7 +33,7 @@ plugins:
       url: "https://cipher.kikkia.dev/"
       userAgent: "doppler-discord-bot"
     oauth:
-      enabled: true
+      enabled: false
       refreshToken: "${YOUTUBE_OAUTH_REFRESH_TOKEN}"
 
 logging:

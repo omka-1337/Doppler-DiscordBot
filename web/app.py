@@ -92,6 +92,7 @@ async def get_dashboard(request: Request):
     settings_modules = await get_settings_by_category("Modules")
     settings_moderation = await get_settings_by_category("Moderation")
     settings_translator = await get_settings_by_category("Translator")
+    settings_serverprotect = await get_settings_by_category("ServerProtect")
 
     t = get_translations("en")
 
@@ -107,8 +108,9 @@ async def get_dashboard(request: Request):
             "settings_modules": settings_modules,
             "settings_moderation": settings_moderation,
             "settings_translator": settings_translator,
+            "settings_serverprotect": settings_serverprotect,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
-            "gemini_key": os.getenv("GEMINI_API_KEY", "")
+            "gemini_key": os.getenv("GEMINI_API_KEY", ""),
         }
     )
 
@@ -166,7 +168,7 @@ async def get_system_settings():
     load_dotenv(dotenv_path=env_path, override=True)
     return {
         "discord_bot_token": os.getenv("DISCORD_BOT_TOKEN", ""),
-        "gemini_api_key": os.getenv("GEMINI_API_KEY", "")
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
     }
 
 # ---------------------------------------------------------------------
@@ -176,7 +178,7 @@ async def get_system_settings():
 async def save_new_key(
     background_tasks: BackgroundTasks,
     DISCORD_BOT_TOKEN: str = Form(...),
-    GEMINI_API_KEY: str = Form(...)
+    GEMINI_API_KEY: str = Form(...),
 ):
     current_token = os.getenv("DISCORD_BOT_TOKEN", "")
     token_changed = False
@@ -226,6 +228,7 @@ MODULE_TOGGLE_MAP = {
     "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
     "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
     "translator": ("dopplerbot.cogs.Translator", "Modules", "translator"),
+    "serverprotect": ("dopplerbot.cogs.serverprotect.ServerProtect", "Modules", "server_protect"),
 }
 
 class ModuleTogglePayload(BaseModel):

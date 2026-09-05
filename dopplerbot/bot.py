@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
-from dopplerbot.database import init_db, get_settings, get_settings_by_category, close_db, get_music_bot
+from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, close_db, get_music_bot
 
 load_dotenv()
 
@@ -24,6 +24,7 @@ COG_EXTENSIONS = [
     "dopplerbot.cogs.music.MusicCommands",
     "dopplerbot.cogs.ai.GeminiChat",
     "dopplerbot.cogs.moderation.ModerationCommands",
+    "dopplerbot.cogs.serverprotect.ServerProtect",
 ]
 
 # Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
@@ -33,6 +34,7 @@ MODULE_CONFIG = {
     "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
     "dopplerbot.cogs.moderation.ModerationCommands": ("Modules", "moderation"),
     "dopplerbot.cogs.Translator": ("Modules", "translator"),
+    "dopplerbot.cogs.serverprotect.ServerProtect": ("Modules", "server_protect"),
 }
 
 # LOGGING
@@ -49,6 +51,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 intents.guilds = True
+# Privileged; must also be enabled in the Discord Developer Portal. Required for
+# on_member_join, which Server Protect uses to post the verify prompt.
+intents.members = True
 
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
@@ -178,10 +183,44 @@ async def load_cogs(bot):
 
 # ---------------------------------------------------------------------
 
+# HOME GUILD LOCK
+# This bot is designed for single-guild use (settings, ServerProtect, etc. are
+# all global, not per-guild). The first guild it's ever in becomes "home" and
+# is persisted; any other guild — whether already joined or invited later — is
+# left immediately to avoid two servers silently sharing one bot's config.
+async def enforce_home_guild():
+    raw_home_id = await get_settings("home_guild_id", "")
+
+    if not raw_home_id:
+        if not bot.guilds:
+            return
+        home_guild = bot.guilds[0]
+        await set_settings("home_guild_id", str(home_guild.id), "Main")
+        logging.info(f"Home guild locked to: {home_guild.name} ({home_guild.id})")
+        home_guild_id = home_guild.id
+    else:
+        try:
+            home_guild_id = int(raw_home_id)
+        except ValueError:
+            logging.error(f"Invalid home_guild_id setting: {raw_home_id!r}")
+            return
+
+    for guild in list(bot.guilds):
+        if guild.id != home_guild_id:
+            logging.warning(f"Leaving non-home guild: {guild.name} ({guild.id})")
+            try:
+                await guild.leave()
+            except discord.HTTPException as e:
+                logging.error(f"Failed to leave guild {guild.id}: {e}")
+
+# ---------------------------------------------------------------------
+
 # EVENTS
 @bot.event
 async def on_ready():
     logging.info(f"Logged in as {bot.user}")
+
+    await enforce_home_guild()
 
     if bot.guilds:
         guild = bot.guilds[0]
@@ -190,6 +229,27 @@ async def on_ready():
         logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
     else:
         logging.warning("Bot is not in any guild, slash commands not synced.")
+
+# ---------------------------------------------------------------------
+
+# Refuse invites to any server other than the locked home guild.
+@bot.event
+async def on_guild_join(guild: discord.Guild):
+    raw_home_id = await get_settings("home_guild_id", "")
+    if not raw_home_id:
+        return  # not locked yet — on_ready will adopt whichever guild ends up first
+
+    try:
+        home_guild_id = int(raw_home_id)
+    except ValueError:
+        return
+
+    if guild.id != home_guild_id:
+        logging.warning(f"Refusing invite: leaving non-home guild {guild.name} ({guild.id})")
+        try:
+            await guild.leave()
+        except discord.HTTPException as e:
+            logging.error(f"Failed to leave guild {guild.id}: {e}")
 
 # ---------------------------------------------------------------------
 

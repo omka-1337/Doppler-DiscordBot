@@ -74,6 +74,31 @@
             "field1_title": "Mod Log Channel ID",
             "field1_description": "The channel where kick/ban/timeout/warn actions will be logged.",
             "save": "💾 Save settings"
+        },
+        "server_protect": {
+            "title": "Account Age Check",
+            "thumbler1_title": "Enable Server Protect",
+            "thumbler1_description": "Check every new member's account age on join; DM the reason and kick if it fails",
+            "requirements": "Requires the Server Members Intent to be enabled for this bot in the Discord Developer Portal.",
+            "field1_title": "Minimum Account Age (days)",
+            "field1_description": "New members with an account younger than this are DM'd the reason and kicked.",
+            "field2_title": "Verified Role ID",
+            "field2_description": "Role granted automatically to members who pass the age check. Leave as 0 to skip granting a role.",
+            "raid_title": "Raid Protection",
+            "raid_description": "Detects a burst of joins in a short window and reacts.",
+            "field3_title": "Response Mode",
+            "field3_description": "Alert: posts a warning with a button only an admin can use to enable lockdown. Auto: the bot enables lockdown itself.",
+            "mode_alert": "🔔 Alert only (admin confirms)",
+            "mode_auto": "🤖 Full autonomy (auto-lockdown)",
+            "field4_title": "Join Threshold",
+            "field4_description": "Number of joins within the time window below that counts as a raid.",
+            "field5_title": "Time Window (seconds)",
+            "field5_description": "The window joins are counted over.",
+            "field6_title": "Alert/Log Channel ID",
+            "field6_description": "Raid alerts and lockdown notices are posted here.",
+            "field7_title": "Lockdown Duration (minutes)",
+            "field7_description": "Lockdown auto-lifts after this long.",
+            "save": "💾 Save settings"
         }
     },
     "settings": {
@@ -86,6 +111,8 @@
             "title": "Main Settings",
             "sub_title1": "Command prefix",
             "description1": "The character that marks the beginning of the bot's text commands.",
+            "sub_title2": "Home Guild ID",
+            "description2": "This bot only operates in one server. Auto-locked to the first server it joins; leave it as-is unless you're deliberately moving the bot to a different server (the bot will leave any other server it's invited to).",
             "save": "💾 Save settings"
         },
         "system": {

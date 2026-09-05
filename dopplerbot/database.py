@@ -92,12 +92,27 @@ async def init_db():
             ("translator_deepl_api_key", "", "Translator"),
             ("translator_google_api_key", "", "Translator"),
 
+            # SERVER PROTECT
+            ("min_account_age_days", "7", "ServerProtect"),
+            ("verified_role_id", "0", "ServerProtect"),
+            # Raid protection: "alert" posts a warning + admin-only button; "auto" locks down by itself.
+            ("raid_mode", "alert", "ServerProtect"),
+            ("raid_join_threshold", "5", "ServerProtect"),
+            ("raid_join_window_seconds", "10", "ServerProtect"),
+            ("raid_alert_channel_id", "0", "ServerProtect"),
+            ("raid_lockdown_duration_minutes", "15", "ServerProtect"),
+            # Runtime state, not a user-facing setting: whether lockdown is currently active.
+            ("raid_lockdown_active", "false", "ServerProtect"),
+            ("raid_lockdown_started_at", "", "ServerProtect"),
+
             # MODULES
             ("ai_features", "true", "Modules"),
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
             ("moderation", "true", "Modules"),
             ("translator", "true", "Modules"),
+            # Off by default: needs DISCORD_CLIENT_ID/SECRET + DASHBOARD_URL configured first.
+            ("server_protect", "false", "Modules"),
 
             # MUSIC BOTS
             ("music_bot_id", "", "Music")

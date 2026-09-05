@@ -224,7 +224,7 @@ async def save_settings(request: Request):
 
 MODULE_TOGGLE_MAP = {
     "ai": ("dopplerbot.cogs.ai.GeminiChat", "AI", "ai_enabled"),
-    "voice": ("dopplerbot.cogs.VoiceManager", "Voice", "voice_enabled"),
+    "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
     "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
     "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
     "translator": ("dopplerbot.cogs.Translator", "Modules", "translator"),

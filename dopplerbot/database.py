@@ -82,6 +82,7 @@ async def init_db():
             # VOICEMANAGER
             ("category_id", "0", "Voice"),
             ("main_voice_channel_id", "0", "Voice"),
+            ("voice_channel_name_prefix", "🏠║", "Voice"),
 
             # MODERATION
             ("mod_log_channel_id", "0", "Moderation"),

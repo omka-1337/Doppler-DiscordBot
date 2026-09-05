@@ -19,7 +19,7 @@ COG_EXTENSIONS = [
     "dopplerbot.cogs.embed",
     "dopplerbot.cogs.web_command",
     "dopplerbot.cogs.Translator",
-    "dopplerbot.cogs.VoiceManager",
+    "dopplerbot.cogs.voice.VoiceManager",
     "dopplerbot.cogs.music.MusicBotsManager",
     "dopplerbot.cogs.music.MusicCommands",
     "dopplerbot.cogs.ai.GeminiChat",
@@ -30,7 +30,7 @@ COG_EXTENSIONS = [
 # Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
 MODULE_CONFIG = {
     "dopplerbot.cogs.ai.GeminiChat": ("AI", "ai_enabled"),
-    "dopplerbot.cogs.VoiceManager": ("Voice", "voice_enabled"),
+    "dopplerbot.cogs.voice.VoiceManager": ("Voice", "voice_enabled"),
     "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
     "dopplerbot.cogs.moderation.ModerationCommands": ("Modules", "moderation"),
     "dopplerbot.cogs.Translator": ("Modules", "translator"),

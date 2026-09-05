@@ -1,16 +1,21 @@
 # VOICE CHANNELS MANAGER
 
 import asyncio
+import random
 import discord
 from discord.ext import commands
 from dopplerbot.database import get_settings_by_category, get_all_temp_channels, add_temp_channel, remove_temp_channel
+from utils.voice.VoiceControlView import ChannelControlView
 
 
 class VoiceManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.user_channels = {}
+        # channel_id -> owner_id. The owner is the only one allowed to manage
+        # the channel via ChannelControlView; ownership transfers if they leave.
+        self.channel_owners: dict[int, int] = {}
         self.creating_channels = set()
+        bot.add_view(ChannelControlView())
 
     # AFTER A RESTART SYNCS THE CHANNELS WITH THE DATABASE
     @commands.Cog.listener()
@@ -29,7 +34,7 @@ class VoiceManager(commands.Cog):
                     except Exception as e:
                         print(f"Error deleting orphan channel {channel_id}: {e}")
                 else:
-                    self.user_channels[owner_id] = channel_id
+                    self.channel_owners[channel_id] = owner_id
             else:
                 await remove_temp_channel(channel_id)
 
@@ -59,21 +64,22 @@ class VoiceManager(commands.Cog):
                 return
 
             try:
+                name_prefix = voice_settings.get("voice_channel_name_prefix", "🏠║")
                 new_channel = await member.guild.create_voice_channel(
-                    name=f"🏠║{member.display_name}",
+                    name=f"{name_prefix}{member.display_name}",
                     category=category
                 )
 
-                self.user_channels[member.id] = new_channel.id
+                self.channel_owners[new_channel.id] = member.id
                 await add_temp_channel(member.id, new_channel.id)
                 await member.move_to(new_channel)
 
                 embed = discord.Embed(
                     title="Voice channel control panel",
-                    description="Use the buttons to navigate.",
+                    description=f"{member.mention} owns this channel and is the only one who can manage it below.",
                     color=discord.Color.yellow()
                 )
-                view = ChannelControlView(new_channel)
+                view = ChannelControlView()
                 await new_channel.send(embed=embed, view=view)
             except Exception as e:
                 print(f"Error creating a channel: {e}")
@@ -81,63 +87,41 @@ class VoiceManager(commands.Cog):
                 self.creating_channels.remove(member.id)  # Remove a user from the block list
 
         # Handling a user's exit from a channel
-        if before.channel and before.channel.id in self.user_channels.values():
+        if before.channel and before.channel.id in self.channel_owners:
+            channel_id = before.channel.id
+
+            # The owner left but others remain: hand ownership to a random
+            # remaining member who doesn't already own a different channel
+            # (owner_id is unique per channel in the DB, so we must not
+            # silently steal someone else's ownership row).
+            if self.channel_owners.get(channel_id) == member.id:
+                remaining = [
+                    m for m in before.channel.members
+                    if not m.bot and m.id not in self.channel_owners.values()
+                ]
+                if remaining:
+                    new_owner = random.choice(remaining)
+                    self.channel_owners[channel_id] = new_owner.id
+                    await remove_temp_channel(channel_id)
+                    await add_temp_channel(new_owner.id, channel_id)
+                    try:
+                        await before.channel.send(
+                            f"👑 {new_owner.mention} is now the owner of this channel (previous owner left)."
+                        )
+                    except discord.Forbidden:
+                        pass
+                else:
+                    del self.channel_owners[channel_id]
+
             await asyncio.sleep(3)
             try:
                 target_channel = before.channel
                 if target_channel and len(target_channel.members) == 0:
-                    channel_id = target_channel.id
                     await target_channel.delete()
-
                     await remove_temp_channel(channel_id)
-                    for user_id, ch_id in list(self.user_channels.items()):
-                        if ch_id == channel_id:
-                            del self.user_channels[user_id]
+                    self.channel_owners.pop(channel_id, None)
             except Exception as e:
                 print(f"Error while deleting a channel: {e}")
-
-
-# BUTTONS
-class ChannelControlView(discord.ui.View):
-    def __init__(self, channel):
-        super().__init__(timeout=None)
-        self.channel = channel
-
-    # Changing the channel name
-    @discord.ui.button(
-        label="Change name",
-        emoji=discord.PartialEmoji(name='edit', id=1367560478041313422),
-        style=discord.ButtonStyle.primary
-    )
-    async def rename_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = RenameChannelModal(self.channel)
-        await interaction.response.send_modal(modal)
-
-
-# MODALS
-class RenameChannelModal(discord.ui.Modal):
-    def __init__(self, channel: discord.VoiceChannel):
-        super().__init__(title="Change the channel name")
-        self.channel = channel
-        self.new_name = discord.ui.TextInput(
-            label="New channel name",
-            placeholder="Enter a new name...",
-            max_length=100
-        )
-        self.add_item(self.new_name)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            await self.channel.edit(name=self.new_name.value)
-            await interaction.response.send_message(
-                f"✅ The channel name has been changed to: **{self.new_name.value}**",
-                ephemeral=True
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Error when changing the channel name: {e}",
-                ephemeral=True
-            )
 
 
 async def setup(bot):

@@ -396,7 +396,16 @@
                     <input type="text" name="category_id" id="set_category_id"
                         value="{{ settings_voice.get('category_id', '0') }}" placeholder="Sample: 123456789012345678"
                         class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono font-normal">
-                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field2_title }} </p>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field2_description }} </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.voice.field3_title }} </label>
+                    <input type="text" name="voice_channel_name_prefix" id="set_voice_channel_name_prefix"
+                        value="{{ settings_voice.get('voice_channel_name_prefix', '🏠║') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field3_description }} </p>
                 </div>
 
                 <div class="pt-2">

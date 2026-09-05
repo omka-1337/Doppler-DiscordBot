@@ -63,6 +63,8 @@
             "field1_description": "A room where, upon entering, the bot will create a private channel and move the user there.",
             "field2_title": "Category ID for new rooms",
             "field2_description": "The category in which temporary voice channels will be created.",
+            "field3_title": "Channel Name Prefix",
+            "field3_description": "Prepended to the member's display name for new temporary channels (e.g. 🏠║username).",
             "save": "💾 Save settings"
         },
         "moderation": {

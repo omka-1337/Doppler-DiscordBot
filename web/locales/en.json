@@ -43,6 +43,7 @@
         "tab4": "🛡️ Moderation",
         "ai_settings": {
             "title": "AI Persona Settings",
+            "provider_title": "AI Provider",
             "name": "The Name of bot",
             "prompt": "System Prompt",
             "description": "Basic instructions that define the behavior and nature of the bot.",
@@ -123,8 +124,6 @@
             "warning": "Attention: Changing the Discord Bot Token triggers an automatic restart of the container to apply the new settings. The web panel may be temporarily unavailable for 5–10 seconds.",
             "field1_title": "Discord Bot Token",
             "field1_description": "Hover your mouse over the field to view the token.",
-            "field2_title": "Gemini API Key",
-            "field2_description": "Hover your mouse over the field to view the API key.",
             "save": "💾 Save settings"
         }
     }

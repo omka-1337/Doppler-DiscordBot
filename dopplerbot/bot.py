@@ -22,14 +22,14 @@ COG_EXTENSIONS = [
     "dopplerbot.cogs.voice.VoiceManager",
     "dopplerbot.cogs.music.MusicBotsManager",
     "dopplerbot.cogs.music.MusicCommands",
-    "dopplerbot.cogs.ai.GeminiChat",
+    "dopplerbot.cogs.ai.AiChat",
     "dopplerbot.cogs.moderation.ModerationCommands",
     "dopplerbot.cogs.serverprotect.ServerProtect",
 ]
 
 # Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
 MODULE_CONFIG = {
-    "dopplerbot.cogs.ai.GeminiChat": ("AI", "ai_enabled"),
+    "dopplerbot.cogs.ai.AiChat": ("AI", "ai_enabled"),
     "dopplerbot.cogs.voice.VoiceManager": ("Voice", "voice_enabled"),
     "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
     "dopplerbot.cogs.moderation.ModerationCommands": ("Modules", "moderation"),

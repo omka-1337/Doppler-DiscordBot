@@ -71,13 +71,16 @@ async def init_db():
             ("prefix", "+", "Main"),
 
             # AI
-            ("ai_chat_enabled", "true", "AI"),
             ("ai_bot_name", "Kara AI", "AI"),
             ("ai_system_prompt", "You're a moderator on Discord. Be polite and helpful.", "AI"),
             ("ai_language", "English", "AI"),
             ("ai_irony", "0.2", "AI"),
             ("ai_seriousness", "0.8", "AI"),
             ("ai_force_language", "true", "AI"),
+            ("ai_provider", "gemini", "AI"),
+            ("ai_gemini_api_key", "", "AI"),
+            ("ai_deepseek_api_key", "", "AI"),
+            ("ai_chatgpt_api_key", "", "AI"),
 
             # VOICEMANAGER
             ("category_id", "0", "Voice"),

@@ -110,7 +110,6 @@ async def get_dashboard(request: Request):
             "settings_translator": settings_translator,
             "settings_serverprotect": settings_serverprotect,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
-            "gemini_key": os.getenv("GEMINI_API_KEY", ""),
         }
     )
 
@@ -168,7 +167,6 @@ async def get_system_settings():
     load_dotenv(dotenv_path=env_path, override=True)
     return {
         "discord_bot_token": os.getenv("DISCORD_BOT_TOKEN", ""),
-        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
     }
 
 # ---------------------------------------------------------------------
@@ -178,7 +176,6 @@ async def get_system_settings():
 async def save_new_key(
     background_tasks: BackgroundTasks,
     DISCORD_BOT_TOKEN: str = Form(...),
-    GEMINI_API_KEY: str = Form(...),
 ):
     current_token = os.getenv("DISCORD_BOT_TOKEN", "")
     token_changed = False
@@ -187,10 +184,6 @@ async def save_new_key(
         if DISCORD_BOT_TOKEN != current_token:
             update_env_file("DISCORD_BOT_TOKEN", DISCORD_BOT_TOKEN)
             token_changed = True
-
-    if GEMINI_API_KEY and not GEMINI_API_KEY.startswith("****"):
-        update_env_file("GEMINI_API_KEY", GEMINI_API_KEY)
-        os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 
     if token_changed:
         background_tasks.add_task(schedule_restart)
@@ -223,7 +216,7 @@ async def save_settings(request: Request):
 # ---------------------------------------------------------------------
 
 MODULE_TOGGLE_MAP = {
-    "ai": ("dopplerbot.cogs.ai.GeminiChat", "AI", "ai_enabled"),
+    "ai": ("dopplerbot.cogs.ai.AiChat", "AI", "ai_enabled"),
     "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
     "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
     "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),

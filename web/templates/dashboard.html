@@ -230,6 +230,10 @@
                         class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
                         📑 Translator
                     </button>
+                    <button onclick="switchModuleCategory('ServerProtect')" id="mod-btn-ServerProtect"
+                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        🔒 Server Protect
+                    </button>
                 </div>
             </div>
 
@@ -258,6 +262,55 @@
                 <h3
                     class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
                     {{ t.modules.ai_settings.title }} </h3>
+
+                <!-- Provider Dropdown -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.ai_settings.provider_title }} </label>
+                    <select name="ai_provider" id="set_ai_provider" onchange="toggleAiProviderFields()"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                        <option value="gemini" {% if settings_ai.get('ai_provider', 'gemini' )=='gemini' %}selected{%
+                            endif %}>Google Gemini</option>
+                        <option value="deepseek" {% if settings_ai.get('ai_provider')=='deepseek' %}selected{% endif
+                            %}>DeepSeek</option>
+                        <option value="chatgpt" {% if settings_ai.get('ai_provider')=='chatgpt' %}selected{% endif %}>
+                            ChatGPT (OpenAI)</option>
+                    </select>
+                </div>
+
+                <!-- Gemini API Key -->
+                <div id="ai-gemini-key-block">
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Gemini API Key</label>
+                    <div class="relative group">
+                        <input type="password" name="ai_gemini_api_key" id="set_ai_gemini_api_key"
+                            value="{{ settings_ai.get('ai_gemini_api_key', '') }}" placeholder="Enter Gemini API key..."
+                            onmouseenter="this.type='text'" onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                </div>
+
+                <!-- DeepSeek API Key -->
+                <div id="ai-deepseek-key-block">
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">DeepSeek API Key</label>
+                    <div class="relative group">
+                        <input type="password" name="ai_deepseek_api_key" id="set_ai_deepseek_api_key"
+                            value="{{ settings_ai.get('ai_deepseek_api_key', '') }}"
+                            placeholder="Enter DeepSeek API key..." onmouseenter="this.type='text'"
+                            onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                </div>
+
+                <!-- ChatGPT API Key -->
+                <div id="ai-chatgpt-key-block">
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">OpenAI API Key</label>
+                    <div class="relative group">
+                        <input type="password" name="ai_chatgpt_api_key" id="set_ai_chatgpt_api_key"
+                            value="{{ settings_ai.get('ai_chatgpt_api_key', '') }}" placeholder="Enter OpenAI API key..."
+                            onmouseenter="this.type='text'" onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                </div>
 
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
@@ -392,7 +445,16 @@
                     <input type="text" name="category_id" id="set_category_id"
                         value="{{ settings_voice.get('category_id', '0') }}" placeholder="Sample: 123456789012345678"
                         class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono font-normal">
-                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field2_title }} </p>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field2_description }} </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.voice.field3_title }} </label>
+                    <input type="text" name="voice_channel_name_prefix" id="set_voice_channel_name_prefix"
+                        value="{{ settings_voice.get('voice_channel_name_prefix', '🏠║') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field3_description }} </p>
                 </div>
 
                 <div class="pt-2">
@@ -602,6 +664,127 @@
                 </div>
             </form>
 
+            <!-- MODULE: SERVER PROTECT SETTINGS -->
+            <form id="form-module-ServerProtect" onsubmit="saveSettings(event, 'ServerProtect')"
+                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+
+                <!-- Module Enable/Disable Toggle Row -->
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
+                            t.modules.server_protect.thumbler1_title }}
+                        </span>
+                        <span class="text-[10px] text-gray-400"> {{ t.modules.server_protect.thumbler1_description }}
+                        </span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_server_protect_enabled" {% if
+                            settings_modules.get('server_protect', 'false' )=='true' %}checked{% endif %}
+                            onchange="toggleModule('serverprotect', this.checked)" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+                <p class="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/30 rounded p-2.5 leading-relaxed">
+                    {{ t.modules.server_protect.requirements }}
+                </p>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
+                    {{ t.modules.server_protect.title }} </h3>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.server_protect.field1_title }}
+                    </label>
+                    <input type="number" min="0" name="min_account_age_days" id="set_min_account_age_days"
+                        value="{{ settings_serverprotect.get('min_account_age_days', '7') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.server_protect.field1_description }} </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.server_protect.field2_title }}
+                    </label>
+                    <input type="text" name="verified_role_id" id="set_verified_role_id"
+                        value="{{ settings_serverprotect.get('verified_role_id', '0') }}"
+                        placeholder="Sample: 123456789012345678"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.server_protect.field2_description }} </p>
+                </div>
+
+                <h3
+                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 pt-2 uppercase text-xs tracking-wider">
+                    {{ t.modules.server_protect.raid_title }} </h3>
+                <p class="text-[11px] text-gray-400 -mt-2">{{ t.modules.server_protect.raid_description }}</p>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.server_protect.field3_title }}
+                    </label>
+                    <select name="raid_mode" id="set_raid_mode"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                        <option value="alert" {% if settings_serverprotect.get('raid_mode', 'alert' )=='alert'
+                            %}selected{% endif %}>{{ t.modules.server_protect.mode_alert }}</option>
+                        <option value="auto" {% if settings_serverprotect.get('raid_mode')=='auto' %}selected{% endif
+                            %}>{{ t.modules.server_protect.mode_auto }}</option>
+                    </select>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.server_protect.field3_description }} </p>
+                </div>
+
+                <div class="flex gap-4">
+                    <div class="w-1/2">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                            t.modules.server_protect.field4_title }}
+                        </label>
+                        <input type="number" min="1" name="raid_join_threshold" id="set_raid_join_threshold"
+                            value="{{ settings_serverprotect.get('raid_join_threshold', '5') }}"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    </div>
+                    <div class="w-1/2">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                            t.modules.server_protect.field5_title }}
+                        </label>
+                        <input type="number" min="1" name="raid_join_window_seconds" id="set_raid_join_window_seconds"
+                            value="{{ settings_serverprotect.get('raid_join_window_seconds', '10') }}"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-400 -mt-2"> {{ t.modules.server_protect.field4_description }} </p>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.server_protect.field6_title }}
+                    </label>
+                    <input type="text" name="raid_alert_channel_id" id="set_raid_alert_channel_id"
+                        value="{{ settings_serverprotect.get('raid_alert_channel_id', '0') }}"
+                        placeholder="Sample: 123456789012345678"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.server_protect.field6_description }} </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.modules.server_protect.field7_title }}
+                    </label>
+                    <input type="number" min="1" name="raid_lockdown_duration_minutes"
+                        id="set_raid_lockdown_duration_minutes"
+                        value="{{ settings_serverprotect.get('raid_lockdown_duration_minutes', '15') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.server_protect.field7_description }} </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
+                        {{ t.modules.server_protect.save }}
+                    </button>
+                </div>
+            </form>
+
             <p id="moduleStatusMsg"
                 class="text-sm font-semibold hidden p-3 rounded bg-[#2b2d31] border border-[#3f4147] text-center"></p>
 
@@ -649,6 +832,15 @@
                     <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.main_settings.description1 }} </p>
                 </div>
 
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
+                        t.settings.main_settings.sub_title2 }} </label>
+                    <input type="text" name="home_guild_id" id="set_home_guild_id"
+                        value="{{ settings_main.get('home_guild_id', '') }}"
+                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.main_settings.description2 }} </p>
+                </div>
+
                 <div class="pt-2">
                     <button type="submit"
                         class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
@@ -689,19 +881,6 @@
                             class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
                     </div>
                     <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.system.field1_description }} </p>
-                </div>
-
-                <!-- Gemini API Key -->
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5"> {{
-                        t.settings.system.field2_title }} </label>
-                    <div class="relative group">
-                        <input type="password" name="GEMINI_API_KEY" id="set_gemini_api_key" value="{{ gemini_key }}"
-                            placeholder="Enter new API key..." onmouseenter="this.type='text'"
-                            onmouseleave="this.type='password'" autocomplete="off"
-                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
-                    </div>
-                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.system.field2_description }} </p>
                 </div>
 
                 <div class="pt-2">

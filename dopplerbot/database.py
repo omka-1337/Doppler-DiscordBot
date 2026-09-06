@@ -71,17 +71,21 @@ async def init_db():
             ("prefix", "+", "Main"),
 
             # AI
-            ("ai_chat_enabled", "true", "AI"),
             ("ai_bot_name", "Kara AI", "AI"),
             ("ai_system_prompt", "You're a moderator on Discord. Be polite and helpful.", "AI"),
             ("ai_language", "English", "AI"),
             ("ai_irony", "0.2", "AI"),
             ("ai_seriousness", "0.8", "AI"),
             ("ai_force_language", "true", "AI"),
+            ("ai_provider", "gemini", "AI"),
+            ("ai_gemini_api_key", "", "AI"),
+            ("ai_deepseek_api_key", "", "AI"),
+            ("ai_chatgpt_api_key", "", "AI"),
 
             # VOICEMANAGER
             ("category_id", "0", "Voice"),
             ("main_voice_channel_id", "0", "Voice"),
+            ("voice_channel_name_prefix", "🏠║", "Voice"),
 
             # MODERATION
             ("mod_log_channel_id", "0", "Moderation"),
@@ -92,12 +96,27 @@ async def init_db():
             ("translator_deepl_api_key", "", "Translator"),
             ("translator_google_api_key", "", "Translator"),
 
+            # SERVER PROTECT
+            ("min_account_age_days", "7", "ServerProtect"),
+            ("verified_role_id", "0", "ServerProtect"),
+            # Raid protection: "alert" posts a warning + admin-only button; "auto" locks down by itself.
+            ("raid_mode", "alert", "ServerProtect"),
+            ("raid_join_threshold", "5", "ServerProtect"),
+            ("raid_join_window_seconds", "10", "ServerProtect"),
+            ("raid_alert_channel_id", "0", "ServerProtect"),
+            ("raid_lockdown_duration_minutes", "15", "ServerProtect"),
+            # Runtime state, not a user-facing setting: whether lockdown is currently active.
+            ("raid_lockdown_active", "false", "ServerProtect"),
+            ("raid_lockdown_started_at", "", "ServerProtect"),
+
             # MODULES
             ("ai_features", "true", "Modules"),
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
             ("moderation", "true", "Modules"),
             ("translator", "true", "Modules"),
+            # Off by default: needs DISCORD_CLIENT_ID/SECRET + DASHBOARD_URL configured first.
+            ("server_protect", "false", "Modules"),
 
             # MUSIC BOTS
             ("music_bot_id", "", "Music")

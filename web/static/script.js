@@ -458,10 +458,8 @@ async function loadSystemSettings() {
 
         const data = await response.json();
 
-        const apiKeyInput = document.getElementById('set_gemini_api_key');
         const tokenInput = document.getElementById('set_discord_bot_token');
 
-        if (apiKeyInput) apiKeyInput.value = data.gemini_api_key || '';
         if (tokenInput) tokenInput.value = data.discord_bot_token || '';
 
     } catch (error) {
@@ -540,6 +538,21 @@ function toggleTranslatorProviderFields() {
     const isDeepl = select.value === 'deepl';
     deeplBlock.classList.toggle('hidden', !isDeepl);
     googleBlock.classList.toggle('hidden', isDeepl);
+}
+
+// Show only the API key field relevant to the currently selected AI provider
+function toggleAiProviderFields() {
+    const select = document.getElementById('set_ai_provider');
+    const blocks = {
+        gemini: document.getElementById('ai-gemini-key-block'),
+        deepseek: document.getElementById('ai-deepseek-key-block'),
+        chatgpt: document.getElementById('ai-chatgpt-key-block'),
+    };
+    if (!select || !blocks.gemini || !blocks.deepseek || !blocks.chatgpt) return;
+
+    Object.entries(blocks).forEach(([provider, block]) => {
+        block.classList.toggle('hidden', select.value !== provider);
+    });
 }
 
 // ---------------------------------------------------------------------
@@ -684,6 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
     loadMusicBots();
     toggleTranslatorProviderFields();
+    toggleAiProviderFields();
     loadYouTubeOAuthStatus();
     initStats();
     connectLogsWebSocket();

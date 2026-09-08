@@ -145,12 +145,39 @@ async def handle_stats(request):
 
 # ---------------------------------------------------------------------
 
+# DASHBOARD LOGIN AUTHORIZATION
+# Called by the web dashboard after a Discord OAuth login, to decide whether
+# the authenticated account may enter the panel: the home guild's owner, or
+# anyone with Administrator permission there.
+async def handle_check_admin(request):
+    data = await request.json()
+
+    try:
+        user_id = int(data.get("user_id"))
+    except (TypeError, ValueError):
+        return web.json_response({"status": "error", "message": "Invalid user_id"}, status=400)
+
+    if not bot.guilds:
+        return web.json_response({"authorized": False})
+
+    guild = bot.guilds[0]
+    try:
+        member = guild.get_member(user_id) or await guild.fetch_member(user_id)
+    except discord.NotFound:
+        return web.json_response({"authorized": False})
+
+    authorized = guild.owner_id == user_id or member.guild_permissions.administrator
+    return web.json_response({"authorized": authorized})
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
     app.router.add_post("/internal/toggle-cog", handle_reload_cog)
     app.router.add_post("/internal/toggle-music-bot", handle_toggle_music_bot)
     app.router.add_get("/internal/stats", handle_stats)
+    app.router.add_post("/internal/check-admin", handle_check_admin)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
     # stats tab) — per-request access logs here are just noise in latest.log.
     runner = web.AppRunner(app, access_log=None)

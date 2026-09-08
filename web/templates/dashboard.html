@@ -52,6 +52,14 @@
                 {{ t.tabs.settings }}
             </button>
         </div>
+
+        {% if logged_in_username %}
+        <div class="flex items-center gap-3 pl-3">
+            <span class="text-xs text-gray-400">👤 {{ logged_in_username }}</span>
+            <a href="/auth/logout"
+                class="text-xs text-gray-400 hover:text-red-400 transition font-semibold">🚪 Logout</a>
+        </div>
+        {% endif %}
     </nav>
 
     <!-- MAIN FUNCTIONS -->
@@ -881,6 +889,19 @@
                             class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
                     </div>
                     <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.system.field1_description }} </p>
+                </div>
+
+                <!-- Discord OAuth Client Secret (enables dashboard login) -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5"> {{
+                        t.settings.system.field2_title }} </label>
+                    <div class="relative group">
+                        <input type="password" name="DISCORD_CLIENT_SECRET" id="set_discord_client_secret"
+                            value="{{ discord_client_secret }}" placeholder="Enter client secret..."
+                            onmouseenter="this.type='text'" onmouseleave="this.type='password'" autocomplete="off"
+                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.settings.system.field2_description }} </p>
                 </div>
 
                 <div class="pt-2">

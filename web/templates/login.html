@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-[#1e1f22] text-gray-200 min-h-screen font-sans flex items-center justify-center p-6">
+
+    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg shadow-lg p-8 max-w-md w-full">
+        <div class="text-center mb-6">
+            <div class="text-4xl mb-3">🔒</div>
+            <h1 class="text-xl font-bold text-white mb-1">Bot Dashboard</h1>
+            <p class="text-sm text-gray-400">Only the server owner or an administrator can sign in.</p>
+        </div>
+
+        {% if error %}
+        <p class="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2.5 mb-5 leading-relaxed">
+            {{ error }}
+        </p>
+        {% endif %}
+
+        <!-- Redirect URI setup: the one thing that has to be done by hand -->
+        <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3.5 mb-5">
+            <p class="text-[11px] text-amber-300/90 leading-relaxed mb-2.5">
+                ⚠️ Before your first login, this exact address must be added to your bot application's
+                <strong>OAuth2 → Redirects</strong> list in the Discord Developer Portal — otherwise Discord will
+                answer with "Invalid OAuth2 redirect_uri".
+            </p>
+
+            <div class="flex items-stretch gap-2 mb-2.5">
+                <input id="redirectUri" type="text" value="{{ redirect_uri }}" readonly
+                    class="flex-1 min-w-0 bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white font-mono text-[11px] focus:outline-none focus:border-indigo-500 transition">
+                <button type="button" onclick="copyRedirectUri()" id="copyBtn"
+                    class="bg-[#3f4147] hover:bg-[#4a4d53] text-white text-[11px] px-3 rounded font-semibold transition flex-shrink-0 whitespace-nowrap">
+                    📋 Copy
+                </button>
+            </div>
+
+            <a href="{{ portal_url }}" target="_blank" rel="noopener noreferrer"
+                class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold">
+                Open the Developer Portal ↗
+            </a>
+        </div>
+
+        {% if discord_auth_url %}
+        <a href="{{ discord_auth_url }}"
+            class="block w-full bg-[#5865f2] hover:bg-[#4752c4] text-white text-center font-bold py-2.5 rounded transition shadow-md text-sm">
+            Login with Discord
+        </a>
+        {% endif %}
+    </div>
+
+    <script>
+        function copyRedirectUri() {
+            const input = document.getElementById('redirectUri');
+            const btn = document.getElementById('copyBtn');
+
+            const markCopied = () => {
+                btn.textContent = '✅ Copied';
+                setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+            };
+
+            // navigator.clipboard needs a secure context, which a plain-HTTP LAN
+            // address isn't — fall back to selecting the text and execCommand.
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(input.value).then(markCopied);
+                return;
+            }
+
+            input.select();
+            input.setSelectionRange(0, input.value.length);
+            try {
+                document.execCommand('copy');
+                markCopied();
+            } catch (err) {
+                btn.textContent = '⚠️ Copy manually';
+                setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+            }
+        }
+    </script>
+
+</body>
+
+</html>

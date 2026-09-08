@@ -2,21 +2,26 @@ from dopplerbot.database import update_music_bot, add_music_bot, remove_music_bo
 import asyncio
 import json
 import os
+import secrets
+import time
 import uuid
 import httpx
 import psutil
+from urllib.parse import urlencode
 
 from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, UploadFile, File, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from utils.i18n import get_translations
 
-from dopplerbot.database import get_settings_by_category, set_settings
+from dopplerbot.database import get_settings, get_settings_by_category, set_settings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -25,6 +30,14 @@ env_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+
+# Persisted once on first run so sessions survive restarts, instead of everyone
+# getting logged out whenever the container restarts.
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "")
+if not SESSION_SECRET_KEY:
+    SESSION_SECRET_KEY = secrets.token_hex(32)
+    update_env_file("SESSION_SECRET_KEY", SESSION_SECRET_KEY)
+    os.environ["SESSION_SECRET_KEY"] = SESSION_SECRET_KEY
 
 app = FastAPI(title="Bot Dashboard")
 
@@ -50,6 +63,91 @@ app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 app.mount("/embed-images", StaticFiles(directory=EMBED_IMAGES_DIR), name="embed-images")
 
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+
+# ---------------------------------------------------------------------
+
+# DASHBOARD LOGIN (Discord OAuth2)
+DISCORD_OAUTH_AUTHORIZE_URL = "https://discord.com/oauth2/authorize"
+DISCORD_OAUTH_TOKEN_URL = "https://discord.com/api/oauth2/token"
+DISCORD_API_BASE = "https://discord.com/api/v10"
+DISCORD_DEVELOPER_PORTAL_URL = "https://discord.com/developers/applications"
+
+# In-memory CSRF state store: state -> expiry timestamp. Short-lived by design;
+# losing it on a restart just means an in-flight login needs retrying.
+_pending_login_states: dict[str, float] = {}
+LOGIN_STATE_TTL_SECONDS = 600
+
+# Paths reachable without being logged in.
+PUBLIC_PATHS = {"/auth/login", "/auth/callback"}
+PUBLIC_PREFIXES = ("/static/",)
+
+# The OAuth2 "Client ID" is the bot application's own ID, so it's looked up from
+# Discord with the bot token already on hand rather than asking anyone to copy it.
+# Cached because it never changes for a given bot. The Client Secret has no such
+# lookup — Discord never exposes it to a bot-token-authenticated request — which
+# is why that one value still has to be entered by hand.
+_cached_client_id: str | None = None
+
+
+async def get_discord_client_id() -> str | None:
+    global _cached_client_id
+    if _cached_client_id:
+        return _cached_client_id
+
+    token = os.getenv("DISCORD_BOT_TOKEN", "")
+    if not token:
+        return None
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{DISCORD_API_BASE}/oauth2/applications/@me",
+                headers={"Authorization": f"Bot {token}"},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            _cached_client_id = response.json().get("id")
+    except Exception as e:
+        print(f"Failed to auto-detect the Discord Client ID: {e}")
+        return None
+
+    return _cached_client_id
+
+
+# Login turns itself on — no separate switch — the moment everything it needs
+# exists: a bot token, a locked home guild (so there's something to check
+# ownership/Administrator against), and a Client Secret. Until then the
+# dashboard stays open, so a fresh install can never lock itself out of the
+# very settings page that configures this.
+async def is_login_configured() -> bool:
+    if not os.getenv("DISCORD_BOT_TOKEN") or not os.getenv("DISCORD_CLIENT_SECRET"):
+        return False
+    home_guild_id = await get_settings("home_guild_id", "")
+    return bool(home_guild_id)
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        if not await is_login_configured():
+            return await call_next(request)
+
+        if not request.session.get("authorized"):
+            if path.startswith("/api/") or path.startswith("/ws/"):
+                return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+            return RedirectResponse("/auth/login")
+
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
+# Added last so it wraps AuthMiddleware and runs first, making request.session
+# available by the time AuthMiddleware checks it.
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="lax")
 
 # ---------------------------------------------------------------------
 
@@ -110,6 +208,8 @@ async def get_dashboard(request: Request):
             "settings_translator": settings_translator,
             "settings_serverprotect": settings_serverprotect,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
+            "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
+            "logged_in_username": request.session.get("username", ""),
         }
     )
 
@@ -167,6 +267,7 @@ async def get_system_settings():
     load_dotenv(dotenv_path=env_path, override=True)
     return {
         "discord_bot_token": os.getenv("DISCORD_BOT_TOKEN", ""),
+        "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
     }
 
 # ---------------------------------------------------------------------
@@ -176,6 +277,7 @@ async def get_system_settings():
 async def save_new_key(
     background_tasks: BackgroundTasks,
     DISCORD_BOT_TOKEN: str = Form(...),
+    DISCORD_CLIENT_SECRET: str = Form(""),
 ):
     current_token = os.getenv("DISCORD_BOT_TOKEN", "")
     token_changed = False
@@ -184,6 +286,10 @@ async def save_new_key(
         if DISCORD_BOT_TOKEN != current_token:
             update_env_file("DISCORD_BOT_TOKEN", DISCORD_BOT_TOKEN)
             token_changed = True
+
+    if DISCORD_CLIENT_SECRET and not DISCORD_CLIENT_SECRET.startswith("****"):
+        update_env_file("DISCORD_CLIENT_SECRET", DISCORD_CLIENT_SECRET)
+        os.environ["DISCORD_CLIENT_SECRET"] = DISCORD_CLIENT_SECRET
 
     if token_changed:
         background_tasks.add_task(schedule_restart)
@@ -399,6 +505,13 @@ async def get_stats():
 # and pushes new lines to the browser over a WebSocket.
 @app.websocket("/ws/logs")
 async def stream_logs(websocket: WebSocket):
+    # AuthMiddleware doesn't run for WebSocket connections, so the same check
+    # (including the same bypass while login isn't configured yet) is repeated
+    # here. SessionMiddleware itself does populate the session for WebSockets.
+    if await is_login_configured() and not websocket.session.get("authorized"):
+        await websocket.close(code=4401)
+        return
+
     await websocket.accept()
 
     try:
@@ -436,3 +549,127 @@ async def stream_logs(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
+
+# ---------------------------------------------------------------------
+
+# DASHBOARD LOGIN: renders the "Login with Discord" page.
+# redirect_uri is derived from whatever address the browser is actually using,
+# so localhost / a LAN IP / a domain all work — but each one has to be listed
+# in the application's OAuth2 redirect list, which is the single most common
+# thing to get wrong, so the page spells that address out with a copy button
+# and links straight to the right Developer Portal page.
+@app.get("/auth/login", response_class=HTMLResponse)
+async def auth_login(request: Request):
+    redirect_uri = f"{str(request.base_url).rstrip('/')}/auth/callback"
+    client_id = await get_discord_client_id()
+
+    portal_url = (
+        f"{DISCORD_DEVELOPER_PORTAL_URL}/{client_id}/oauth2"
+        if client_id
+        else DISCORD_DEVELOPER_PORTAL_URL
+    )
+
+    context = {
+        "redirect_uri": redirect_uri,
+        "portal_url": portal_url,
+        "error": request.query_params.get("error_message"),
+    }
+
+    if not client_id:
+        context["error"] = context["error"] or (
+            "Couldn't reach Discord with the bot token, so the login link can't be built yet."
+        )
+        return templates.TemplateResponse(request=request, name="login.html", context=context)
+
+    state = secrets.token_urlsafe(24)
+    _pending_login_states[state] = time.time() + LOGIN_STATE_TTL_SECONDS
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "identify",
+        "state": state,
+    }
+    context["discord_auth_url"] = f"{DISCORD_OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
+
+    return templates.TemplateResponse(request=request, name="login.html", context=context)
+
+# ---------------------------------------------------------------------
+
+# DASHBOARD LOGIN: OAuth2 callback — exchanges the code, then asks the bot
+# container whether this Discord account owns the home guild or has
+# Administrator there before granting a session.
+@app.get("/auth/callback", response_class=HTMLResponse)
+async def auth_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
+    def deny(message: str):
+        return RedirectResponse(f"/auth/login?{urlencode({'error_message': message})}")
+
+    if error:
+        return deny("Login was cancelled.")
+
+    expiry = _pending_login_states.pop(state or "", None)
+    if not expiry or expiry < time.time():
+        return deny("That login link expired or was already used. Please try again.")
+
+    client_id = await get_discord_client_id()
+    client_secret = os.getenv("DISCORD_CLIENT_SECRET", "")
+    redirect_uri = f"{str(request.base_url).rstrip('/')}/auth/callback"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            token_res = await client.post(
+                DISCORD_OAUTH_TOKEN_URL,
+                data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=10.0,
+            )
+            token_res.raise_for_status()
+            access_token = token_res.json()["access_token"]
+
+            user_res = await client.get(
+                f"{DISCORD_API_BASE}/users/@me",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0,
+            )
+            user_res.raise_for_status()
+            user = user_res.json()
+    except Exception as e:
+        print(f"Dashboard login OAuth exchange failed: {e}")
+        return deny("Discord rejected the login. Double-check the Client Secret and the redirect URI below.")
+
+    user_id = user["id"]
+
+    try:
+        async with httpx.AsyncClient() as client:
+            check_res = await client.post(
+                "http://doppler_discord_bot:8001/internal/check-admin",
+                json={"user_id": user_id},
+                timeout=5.0,
+            )
+            authorized = check_res.status_code == 200 and check_res.json().get("authorized", False)
+    except Exception as e:
+        print(f"Failed to check admin status with the bot container: {e}")
+        return deny("Couldn't reach the bot to verify your permissions. Is it running?")
+
+    if not authorized:
+        return deny(f"{user.get('username', 'That account')} isn't the server owner or an administrator.")
+
+    request.session["authorized"] = True
+    request.session["user_id"] = user_id
+    request.session["username"] = user.get("username", "")
+
+    return RedirectResponse("/")
+
+# ---------------------------------------------------------------------
+
+@app.get("/auth/logout")
+async def auth_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/auth/login")

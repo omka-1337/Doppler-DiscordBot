@@ -459,8 +459,10 @@ async function loadSystemSettings() {
         const data = await response.json();
 
         const tokenInput = document.getElementById('set_discord_bot_token');
+        const clientSecretInput = document.getElementById('set_discord_client_secret');
 
         if (tokenInput) tokenInput.value = data.discord_bot_token || '';
+        if (clientSecretInput) clientSecretInput.value = data.discord_client_secret || '';
 
     } catch (error) {
         console.error("Error loading settings:", error);

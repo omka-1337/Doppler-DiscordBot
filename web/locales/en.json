@@ -124,6 +124,8 @@
             "warning": "Attention: Changing the Discord Bot Token triggers an automatic restart of the container to apply the new settings. The web panel may be temporarily unavailable for 5–10 seconds.",
             "field1_title": "Discord Bot Token",
             "field1_description": "Hover your mouse over the field to view the token.",
+            "field2_title": "Discord Client Secret",
+            "field2_description": "From your app's OAuth2 page in the Developer Portal. Setting this turns on dashboard login (the Client ID is detected automatically). The login page shows the redirect URI you'll need to register there.",
             "save": "💾 Save settings"
         }
     }

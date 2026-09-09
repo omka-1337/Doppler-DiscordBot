@@ -12,6 +12,7 @@
 savedata
 plugins
 config
+secrets
 *.db
 latest.log
 

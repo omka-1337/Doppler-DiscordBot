@@ -77,6 +77,25 @@ async def _with_google_cloud(text: str, target_base_lang: str, api_key: str) -> 
     )
 
 
+# The keyless backend scrapes a web endpoint, and when that endpoint refuses --
+# rate limiting, most often -- the library hands back the error page's text as
+# though it were the translation. There is no exception to catch, so the result
+# has to be inspected. Matching on page text is a heuristic, but the
+# alternative is posting Google's error page into Discord as a translation.
+_ERROR_PAGE_MARKERS = (
+    "That\u2019s an error",
+    "That's an error",
+    "Error 500 (Server Error)",
+    "Error 429 (Too Many Requests)",
+    "<html",
+    "<!DOCTYPE",
+)
+
+
+def _looks_like_an_error_page(text: str) -> bool:
+    return any(marker.lower() in text.lower() for marker in _ERROR_PAGE_MARKERS)
+
+
 async def _with_google_free(text: str, target_base_lang: str) -> TranslationResult:
     from deep_translator import GoogleTranslator
 
@@ -84,6 +103,15 @@ async def _with_google_free(text: str, target_base_lang: str) -> TranslationResu
     translated = await asyncio.to_thread(
         lambda: GoogleTranslator(source="auto", target=target).translate(text)
     )
+
+    if not translated or not translated.strip():
+        raise TranslationError("The keyless translation backend returned nothing.")
+
+    if _looks_like_an_error_page(translated):
+        raise TranslationError(
+            "The keyless translation backend is refusing requests (rate limited). "
+            "Configure a DeepL or Google Cloud key for reliable translation."
+        )
 
     return TranslationResult(translated, "auto", target_base_lang, "google-free")
 
@@ -102,6 +130,8 @@ async def translate(text: str, target_base_lang: str, config: dict) -> Translati
         if google_key:
             return await _with_google_cloud(text, target_base_lang, google_key)
         return await _with_google_free(text, target_base_lang)
+    except TranslationError:
+        raise
     except Exception as e:
         log.error("Translation failed (provider=%s): %s", provider, e)
         raise TranslationError(str(e)) from e

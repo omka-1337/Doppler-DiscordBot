@@ -20,7 +20,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from utils.i18n import get_translations
 
+from dopplerbot import __version__ as DOPPLER_VERSION
 from dopplerbot.database import get_settings, get_settings_by_category, set_settings
+from dopplerbot.plugins.api import SettingType
+from dopplerbot.plugins.manifest import CURRENT_API_VERSION
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -200,6 +203,51 @@ async def get_dashboard(request: Request):
         }
     )
 
+
+# ---------------------------------------------------------------------
+
+# PLUGIN API REFERENCE
+# Served from the dashboard rather than linked out: it then matches the version
+# actually installed, and stays available on a LAN-only deployment.
+
+# What each declared setting type renders as. Built by iterating the enum, so a
+# type added to the code and not described here still shows up in the table
+# instead of quietly going missing from the docs.
+_SETTING_TYPE_NOTES = {
+    SettingType.STRING: "Single-line text input.",
+    SettingType.TEXT: "Multi-line textarea — for a system prompt or a long template.",
+    SettingType.SECRET: "Password-style input, masked in the panel and revealed on hover.",
+    SettingType.INT: "Whole number. Honours min and max.",
+    SettingType.FLOAT: "Decimal number.",
+    SettingType.BOOL: "Toggle switch. Coerced to a real bool when read.",
+    SettingType.SELECT: "Dropdown. Requires choices=((value, label), ...).",
+    SettingType.SLIDER: "Range slider. Requires min and max; step defaults to 0.1.",
+    SettingType.CHANNEL: "Discord channel ID. Read back as an int.",
+    SettingType.ROLE: "Discord role ID. Read back as an int.",
+}
+
+
+@app.get("/docs/plugins", response_class=HTMLResponse)
+async def plugin_api_docs(request: Request):
+    setting_types = [
+        {
+            "value": member.value,
+            "note": _SETTING_TYPE_NOTES.get(member, ""),
+        }
+        for member in SettingType
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="plugin_api.html",
+        context={
+            "version": DOPPLER_VERSION,
+            "api_version": CURRENT_API_VERSION,
+            "setting_types": setting_types,
+        },
+    )
+
+# ---------------------------------------------------------------------
 
 class EmbedPayload(BaseModel):
     filename: str

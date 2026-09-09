@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
+from dopplerbot import __version__
 from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, delete_setting, close_db
 from dopplerbot.plugins import PluginRegistry
 
@@ -213,6 +214,7 @@ async def handle_stats(request):
     uptime_seconds = (datetime.now(timezone.utc) - STARTED_AT).total_seconds()
 
     return web.json_response({
+        "version": __version__,
         "started_at": STARTED_AT.isoformat(),
         "uptime_seconds": uptime_seconds,
         "guild_count": len(bot.guilds),
@@ -580,6 +582,7 @@ async def ping(ctx):
 # MAIN START FUNCTION
 async def main():
     try:
+        logging.info(f"Doppler {__version__} starting up.")
         logging.info("Initializing SQLite database...")
         await init_db()
         logging.info("Database initialized successfully.")

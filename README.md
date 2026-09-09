@@ -1,5 +1,7 @@
 # Doppler
 
+**Version 0.1.0** · [Changelog](CHANGELOG.md) · Plugin API 1.0
+
 Doppler is a self-hosted, open-source Discord bot with a web dashboard for configuration — no code editing or redeploys needed for day-to-day settings changes.
 
 ## Features

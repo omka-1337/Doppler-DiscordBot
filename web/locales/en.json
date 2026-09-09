@@ -77,7 +77,8 @@
         "view_sources": "Sources",
         "refresh": "🔄 Refresh catalogue",
         "browse_hint": "Plugins offered by the configured sources. Installing runs someone else's code inside the bot — only install what you trust.",
-        "sources_hint": "Where plugins may be installed from. A new source starts untrusted; plugins from an untrusted source are refused sidecar containers."
+        "sources_hint": "Where plugins may be installed from. A new source starts untrusted; plugins from an untrusted source are refused sidecar containers.",
+        "api_docs": "Writing a plugin? Read the API reference"
     },
     "music": {
         "description": "Worker bot accounts and YouTube playback. Enable or disable the module itself on the Plugins tab."

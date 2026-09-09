@@ -567,6 +567,5 @@ def make_app():
 
 if __name__ == "__main__":
     secret_store.import_from_env()
-    secret_store.import_from_legacy_db()
     log.info("Service broker starting on port 8002 (network=%s)", own_network())
     web.run_app(make_app(), host="0.0.0.0", port=8002, access_log=None)

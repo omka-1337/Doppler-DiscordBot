@@ -9,7 +9,6 @@ never the credential.
 import json
 import logging
 import os
-import sqlite3
 from pathlib import Path
 
 log = logging.getLogger("broker.secrets")
@@ -105,23 +104,9 @@ def import_once(section: str, values: dict) -> bool:
     return changed
 
 
-# The bot's database, read-only. Before this store existed the provider keys
-# lived there, which meant plugin code could read them.
-LEGACY_DB = Path("/project/savedata/bot.db")
-
-# (settings category in bot.db, store section, {db key: store key})
-LEGACY_KEYS = [
-    ("AI", "ai", {
-        "provider": "provider",
-        "gemini_api_key": "gemini_api_key",
-        "deepseek_api_key": "deepseek_api_key",
-        "chatgpt_api_key": "chatgpt_api_key",
-    }),
-]
-
-
-# A first install can put keys straight in .env; the broker picks them up so
-# they never have to pass through the bot at all.
+# First-run seeding: a fresh install can put a provider key straight in .env and
+# the broker picks it up here, so it never passes through the bot at all. Not a
+# migration -- this is how a new install gets configured without the dashboard.
 ENV_SEEDS = [
     ("GEMINI_API_KEY", "ai", "gemini_api_key"),
     ("DEEPSEEK_API_KEY", "ai", "deepseek_api_key"),
@@ -134,33 +119,3 @@ def import_from_env() -> None:
         value = os.getenv(env_var)
         if value and import_once(section, {key: value}):
             log.info("Seeded %s/%s from %s.", section, key, env_var)
-
-
-def import_from_legacy_db() -> None:
-    """One-time move of provider keys out of the bot's database.
-
-    Only fills blanks, so it is safe to run on every start. The bot deletes its
-    copies once it sees them here -- until then both exist, which is the one
-    unavoidable window in the move.
-    """
-    if not LEGACY_DB.is_file():
-        return
-
-    try:
-        con = sqlite3.connect(f"file:{LEGACY_DB}?mode=ro", uri=True)
-    except sqlite3.Error as e:
-        log.warning("Could not open the bot database to import keys: %s", e)
-        return
-
-    try:
-        for category, section, mapping in LEGACY_KEYS:
-            rows = con.execute(
-                "SELECT key, value FROM settings WHERE category = ?", (category,)
-            ).fetchall()
-            values = {mapping[k]: v for k, v in rows if k in mapping and v}
-            if values and import_once(section, values):
-                log.info("Imported %s credentials from the bot database.", section)
-    except sqlite3.Error as e:
-        log.warning("Could not import keys from the bot database: %s", e)
-    finally:
-        con.close()

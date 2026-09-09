@@ -20,14 +20,6 @@ class TempChannelStore:
         self.db = db
 
     async def create_schema(self):
-        # A table carried over from a much older version may predate
-        # original_owner_id. These rows are ephemeral session state -- the real
-        # Discord channels are untouched, they just go unmanaged -- so the
-        # outdated table is dropped rather than migrated.
-        columns = {row[1] for row in await self.db.fetchall("PRAGMA table_info(temp_channels)")}
-        if columns and "original_owner_id" not in columns:
-            await self.db.execute("DROP TABLE temp_channels")
-
         await self.db.executescript(SCHEMA)
 
     async def add(self, channel_id: int, owner_id: int):

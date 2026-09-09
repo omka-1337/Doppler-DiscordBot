@@ -75,7 +75,7 @@
     {
       "id": "voice",
       "name": "Temporary Voice Channels",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "api_version": "1.0",
       "description": "Joining the hub channel creates a private voice channel for the member, with buttons to rename it, set a user limit, change the bitrate, lock it and allow specific people in.",
       "author": "Doppler",

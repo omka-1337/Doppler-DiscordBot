@@ -6,8 +6,13 @@
 .venv
 .vscode
 
-# Runtime data (bind-mounted at runtime, never needed in the image itself)
+# Runtime data (bind-mounted at runtime, never needed in the image itself).
+# plugins/ and config/ are written by the broker as root, so leaving them in
+# the build context also breaks the build for the user who owns the project.
 savedata
+plugins
+config
+secrets
 *.db
 latest.log
 
@@ -18,5 +23,3 @@ latest.log
 __pycache__
 *.pyc
 
-# Lavalink config (used by the separate lavalink image, not this one)
-lavalink

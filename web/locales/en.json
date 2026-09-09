@@ -5,7 +5,8 @@
     "tabs": {
         "stats": "📊 Stats",
         "embed_builder": "🛠️ Embed Builder",
-        "modules": "🧩 Modules",
+        "music": "📻 Music",
+        "plugins": "🧠 Plugins",
         "settings": "⚙️ Settings"
     },
     "stats": {
@@ -34,76 +35,6 @@
             "empty": "Add a card to see a preview..."
         }
     },
-    "modules": {
-        "title": "🧩 Modules",
-        "description": "Enable, disable, and configure specific bot modules.",
-        "tab1": "🤖 AI Settings",
-        "tab2": "🔊 Voice Manager",
-        "tab3": "📻 Music",
-        "tab4": "🛡️ Moderation",
-        "ai_settings": {
-            "title": "AI Persona Settings",
-            "provider_title": "AI Provider",
-            "name": "The Name of bot",
-            "prompt": "System Prompt",
-            "description": "Basic instructions that define the behavior and nature of the bot.",
-            "thumbler1_title": "Enable AI Module",
-            "thumbler1_description": "Toggle AI response functionality on or off",
-            "thumbler2_title": "Force Language",
-            "thumbler2_description": "If off, bot matches user language",
-            "lang_title": "Target Language",
-            "slider1": "Level of irony",
-            "slider2": "Severity Level",
-            "save": "💾 Save settings"
-        },
-        "voice": {
-            "title": "Configuring Automatic Voice Channels",
-            "thumbler1_title": "Enable Voice Module",
-            "thumbler1_description": "Toggle dynamic voice channel creation on or off",
-            "field1_title": "Main Voice Channel ID",
-            "field1_description": "A room where, upon entering, the bot will create a private channel and move the user there.",
-            "field2_title": "Category ID for new rooms",
-            "field2_description": "The category in which temporary voice channels will be created.",
-            "field3_title": "Channel Name Prefix",
-            "field3_description": "Prepended to the member's display name for new temporary channels (e.g. 🏠║username).",
-            "save": "💾 Save settings"
-        },
-        "moderation": {
-            "title": "Moderation Settings",
-            "thumbler1_title": "Enable Moderation Module",
-            "thumbler1_description": "Toggle moderation commands (kick, ban, timeout, warn) on or off",
-            "thumbler2_title": "Enable Mod Log",
-            "thumbler2_description": "Send a log message to the channel below for every moderation action",
-            "field1_title": "Mod Log Channel ID",
-            "field1_description": "The channel where kick/ban/timeout/warn actions will be logged.",
-            "save": "💾 Save settings"
-        },
-        "server_protect": {
-            "title": "Account Age Check",
-            "thumbler1_title": "Enable Server Protect",
-            "thumbler1_description": "Check every new member's account age on join; DM the reason and kick if it fails",
-            "requirements": "Requires the Server Members Intent to be enabled for this bot in the Discord Developer Portal.",
-            "field1_title": "Minimum Account Age (days)",
-            "field1_description": "New members with an account younger than this are DM'd the reason and kicked.",
-            "field2_title": "Verified Role ID",
-            "field2_description": "Role granted automatically to members who pass the age check. Leave as 0 to skip granting a role.",
-            "raid_title": "Raid Protection",
-            "raid_description": "Detects a burst of joins in a short window and reacts.",
-            "field3_title": "Response Mode",
-            "field3_description": "Alert: posts a warning with a button only an admin can use to enable lockdown. Auto: the bot enables lockdown itself.",
-            "mode_alert": "🔔 Alert only (admin confirms)",
-            "mode_auto": "🤖 Full autonomy (auto-lockdown)",
-            "field4_title": "Join Threshold",
-            "field4_description": "Number of joins within the time window below that counts as a raid.",
-            "field5_title": "Time Window (seconds)",
-            "field5_description": "The window joins are counted over.",
-            "field6_title": "Alert/Log Channel ID",
-            "field6_description": "Raid alerts and lockdown notices are posted here.",
-            "field7_title": "Lockdown Duration (minutes)",
-            "field7_description": "Lockdown auto-lifts after this long.",
-            "save": "💾 Save settings"
-        }
-    },
     "settings": {
         "title": "⚙️ Bot Settings",
         "description": "Managing Bot Settings and AI Behavior ",
@@ -112,8 +43,6 @@
         "tab4": "🔑 API & System",
         "main_settings": {
             "title": "Main Settings",
-            "sub_title1": "Command prefix",
-            "description1": "The character that marks the beginning of the bot's text commands.",
             "sub_title2": "Home Guild ID",
             "description2": "This bot only operates in one server. Auto-locked to the first server it joins; leave it as-is unless you're deliberately moving the bot to a different server (the bot will leave any other server it's invited to).",
             "save": "💾 Save settings"
@@ -127,6 +56,29 @@
             "field2_title": "Discord Client Secret",
             "field2_description": "From your app's OAuth2 page in the Developer Portal. Setting this turns on dashboard login (the Client ID is detected automatically). The login page shows the redirect URI you'll need to register there.",
             "save": "💾 Save settings"
+        },
+        "tab_providers": "🔐 AI Provider",
+        "providers": {
+            "title": "🔐 AI Provider",
+            "description": "Configured once here and shared by every plugin that uses a model, so an API key is never pasted into more than one place.",
+            "note": "This key is stored by the broker, in a volume the bot container cannot see. Plugins ask for a completion or a translation and get the result — they never receive the key. Saved keys are never shown again.",
+            "save": "💾 Save"
         }
+    },
+    "plugins": {
+        "title": "🧠 Plugins",
+        "description": "Enable, configure and reload plugins. Reloading applies a plugin's new code without restarting the bot.",
+        "rescan": "🔄 Rescan folder",
+        "loading": "Loading plugins...",
+        "view_installed": "Installed",
+        "view_browse": "Browse",
+        "view_sources": "Sources",
+        "refresh": "🔄 Refresh catalogue",
+        "browse_hint": "Plugins offered by the configured sources. Installing runs someone else's code inside the bot — only install what you trust.",
+        "sources_hint": "Where plugins may be installed from. A new source starts untrusted; plugins from an untrusted source are refused sidecar containers.",
+        "api_docs": "Writing a plugin? Read the API reference"
+    },
+    "music": {
+        "description": "Worker bot accounts and YouTube playback. Enable or disable the module itself on the Plugins tab."
     }
 }

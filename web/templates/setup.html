@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup — Doppler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-[#1e1f22] text-gray-200 min-h-screen font-sans flex items-center justify-center p-6">
+
+    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg shadow-lg p-8 max-w-2xl w-full space-y-6">
+
+        <div class="text-center">
+            <div class="text-4xl mb-3">🚀</div>
+            <h1 class="text-xl font-bold text-white mb-1">Set up Doppler</h1>
+            <p class="text-xs text-gray-400">
+                Both values are checked against Discord before they can be saved.
+            </p>
+        </div>
+
+        <!-- STEP 1: BOT TOKEN -->
+        <div class="space-y-2">
+            <label class="block text-xs font-bold text-gray-400 uppercase">
+                1 · Discord bot token
+            </label>
+            <div class="flex gap-2">
+                <input type="password" id="token" autocomplete="off" placeholder="Paste the bot token..."
+                    class="flex-1 bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
+                <button type="button" id="checkToken" onclick="checkToken()"
+                    class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-4 rounded-lg transition text-xs shrink-0">
+                    Check
+                </button>
+            </div>
+            <p id="tokenStatus" class="text-[11px] text-gray-500">
+                From your application's <span class="text-gray-400">Bot</span> page in the Developer Portal.
+            </p>
+        </div>
+
+        <!-- STEP 2: CLIENT SECRET -->
+        <div class="space-y-2">
+            <label class="block text-xs font-bold text-gray-400 uppercase">
+                2 · OAuth2 client secret
+            </label>
+            <div class="flex gap-2">
+                <input type="password" id="secret" autocomplete="off" placeholder="Paste the client secret..." disabled
+                    class="flex-1 bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition disabled:opacity-40">
+                <button type="button" id="checkSecret" onclick="checkSecret()" disabled
+                    class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-4 rounded-lg transition text-xs shrink-0 disabled:opacity-40">
+                    Check
+                </button>
+            </div>
+            <p id="secretStatus" class="text-[11px] text-gray-500">
+                Check the token first — the secret is verified against the same application.
+            </p>
+        </div>
+
+        <!-- REDIRECT URI -->
+        <div class="bg-[#1e1f22] border border-[#3f4147] rounded-lg p-4 space-y-2">
+            <p class="text-xs text-gray-300 leading-relaxed">
+                Add this address under <strong class="text-white">OAuth2 → Redirects</strong> in the
+                Developer Portal, or the login step will fail:
+            </p>
+            <div class="flex gap-2">
+                <input type="text" id="redirectUri" value="{{ redirect_uri }}" readonly
+                    class="flex-1 bg-[#2b2d31] border border-[#3f4147] rounded p-2 text-indigo-300 font-mono text-xs focus:outline-none">
+                <button type="button" id="copyBtn" onclick="copyRedirectUri()"
+                    class="bg-[#2b2d31] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-3 rounded transition text-xs shrink-0">
+                    Copy
+                </button>
+            </div>
+            <a href="{{ portal_url }}" target="_blank"
+                class="inline-block text-[11px] text-indigo-400 hover:text-indigo-300 hover:underline">
+                Open the Developer Portal ↗
+            </a>
+        </div>
+
+        <!-- INVITE (only once the bot is running but has joined nothing yet) -->
+        <div id="inviteBox" class="hidden bg-[#1e1f22] border border-indigo-500/40 rounded-lg p-4 space-y-2">
+            <p class="text-xs text-gray-300 leading-relaxed">
+                The bot is online but is not in a server yet. Invite it — the first server it
+                joins becomes its home, and login checks ownership there.
+            </p>
+            <a id="inviteLink" href="#" target="_blank"
+                class="inline-block bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded transition text-xs">
+                Invite the bot ↗
+            </a>
+        </div>
+
+        <!-- SAVE -->
+        <div class="space-y-3">
+            <button type="button" id="saveBtn" onclick="save()" disabled
+                class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-[#1e1f22] disabled:text-gray-600 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-lg transition text-sm">
+                Save and continue to login
+            </button>
+            <p id="saveStatus" class="text-[11px] text-center text-gray-500">
+                Both checks must pass before this can be saved.
+            </p>
+        </div>
+
+        <p class="text-[10px] text-gray-600 text-center pt-2 border-t border-[#3f4147]">Doppler {{ version }}</p>
+    </div>
+
+    <script>
+        // Each field's verified state. Editing a field clears it, so the save
+        // button can never reflect a check against a value that has since changed.
+        let tokenOk = false;
+        let secretOk = false;
+
+        const $ = id => document.getElementById(id);
+
+        function setStatus(el, ok, message) {
+            el.textContent = message;
+            el.className = 'text-[11px] ' + (ok === null ? 'text-gray-500'
+                : ok ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold');
+        }
+
+        function refresh() {
+            $('secret').disabled = !tokenOk;
+            $('checkSecret').disabled = !tokenOk;
+            $('saveBtn').disabled = !(tokenOk && secretOk);
+            if (tokenOk && secretOk) {
+                setStatus($('saveStatus'), null, 'Both values verified — ready to save.');
+            }
+        }
+
+        $('token').addEventListener('input', () => {
+            tokenOk = false; secretOk = false;
+            setStatus($('tokenStatus'), null, 'Not checked yet.');
+            setStatus($('secretStatus'), null, 'Check the token first.');
+            refresh();
+        });
+
+        $('secret').addEventListener('input', () => {
+            secretOk = false;
+            setStatus($('secretStatus'), null, 'Not checked yet.');
+            refresh();
+        });
+
+        async function post(url, body) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            return { ok: res.ok, data: await res.json() };
+        }
+
+        async function checkToken() {
+            const btn = $('checkToken');
+            btn.disabled = true;
+            setStatus($('tokenStatus'), null, 'Checking with Discord...');
+            try {
+                const { data } = await post('/api/setup/validate-token', { token: $('token').value });
+                tokenOk = !!data.valid;
+                if (tokenOk) {
+                    const who = data.bot_username || data.application || 'this application';
+                    setStatus($('tokenStatus'), true, `✓ Valid — ${who}`);
+                    setStatus($('secretStatus'), null, 'Now paste the client secret.');
+                } else {
+                    setStatus($('tokenStatus'), false, '✗ ' + (data.message || 'Invalid token.'));
+                }
+            } catch (e) {
+                setStatus($('tokenStatus'), false, '✗ Could not reach the server.');
+            }
+            btn.disabled = false;
+            refresh();
+        }
+
+        async function checkSecret() {
+            const btn = $('checkSecret');
+            btn.disabled = true;
+            setStatus($('secretStatus'), null, 'Checking with Discord...');
+            try {
+                const { data } = await post('/api/setup/validate-secret', {
+                    token: $('token').value, client_secret: $('secret').value
+                });
+                secretOk = !!data.valid;
+                setStatus($('secretStatus'), secretOk,
+                    secretOk ? '✓ Valid' : '✗ ' + (data.message || 'Invalid client secret.'));
+            } catch (e) {
+                setStatus($('secretStatus'), false, '✗ Could not reach the server.');
+            }
+            btn.disabled = false;
+            refresh();
+        }
+
+        async function save() {
+            $('saveBtn').disabled = true;
+            $('token').disabled = true;
+            $('secret').disabled = true;
+            setStatus($('saveStatus'), null, 'Saving...');
+            try {
+                const { ok, data } = await post('/api/setup/save', {
+                    token: $('token').value, client_secret: $('secret').value
+                });
+                if (ok) {
+                    waitForBot();
+                    return;
+                }
+                setStatus($('saveStatus'), false, '✗ ' + (data.detail || 'Could not save.'));
+            } catch (e) {
+                setStatus($('saveStatus'), false, '✗ Could not reach the server.');
+            }
+            $('saveBtn').disabled = false;
+            $('token').disabled = false;
+            $('secret').disabled = false;
+        }
+
+        // The bot container has to restart to pick up the new token, and login
+        // cannot authorise anyone until the bot is in a server to check against.
+        // So the page waits here instead of jumping to a login that would fail.
+        async function waitForBot() {
+            let waited = 0;
+
+            for (;;) {
+                await new Promise(r => setTimeout(r, 2000));
+                waited += 2;
+
+                let res;
+                try {
+                    res = await fetch('/api/setup/status');
+                } catch (e) {
+                    continue;
+                }
+
+                // Once the bot has a home server, login becomes mandatory and
+                // this endpoint starts requiring a session — which is itself
+                // the signal that everything is ready.
+                if (res.status === 401) {
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (!res.ok) continue;
+
+                const d = await res.json();
+
+                if (!d.bot_online) {
+                    setStatus($('saveStatus'), null,
+                        waited < 60
+                            ? `Waiting for the bot to come online... (${waited}s)`
+                            : `Still waiting (${waited}s). Check the bot container's logs if this does not clear.`);
+                    continue;
+                }
+
+                if (!d.guild_count) {
+                    if (d.invite_url) {
+                        $('inviteLink').href = d.invite_url;
+                        $('inviteBox').classList.remove('hidden');
+                    }
+                    setStatus($('saveStatus'), null, 'Bot is online. Invite it to your server to continue.');
+                    continue;
+                }
+
+                setStatus($('saveStatus'), true, 'Bot is online and in your server — taking you to login...');
+                setTimeout(() => window.location.href = '/auth/login', 1200);
+                return;
+            }
+        }
+
+        function copyRedirectUri() {
+            const field = $('redirectUri');
+            field.select();
+            field.setSelectionRange(0, 99999);
+            const done = () => {
+                const btn = $('copyBtn');
+                btn.textContent = 'Copied';
+                setTimeout(() => btn.textContent = 'Copy', 1500);
+            };
+            // navigator.clipboard needs a secure context, which a plain-HTTP
+            // address on a LAN is not — hence the fallback.
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(field.value).then(done);
+            } else {
+                document.execCommand('copy');
+                done();
+            }
+        }
+    </script>
+</body>
+
+</html>

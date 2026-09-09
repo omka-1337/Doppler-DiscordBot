@@ -376,7 +376,7 @@ async function saveSettings(event, category) {
     const formData = new FormData(form);
 
     // Choose active status element based on visible tab
-    const isCogTab = !document.getElementById('tab-cogs').classList.contains('hidden');
+    const isCogTab = !document.getElementById('tab-music').classList.contains('hidden');
     const statusMsg = isCogTab
         ? document.getElementById('moduleStatusMsg')
         : document.getElementById('settingsStatusMsg');
@@ -389,18 +389,6 @@ async function saveSettings(event, category) {
     formData.forEach((value, key) => {
         settingsPayload.settings[key] = value;
     });
-
-    // Explicitly set boolean toggle states for specific module categories
-    if (category === 'AI') {
-        const aiChk = document.getElementById('chk_ai_enabled');
-        const forceLangChk = document.getElementById('chk_ai_force_language');
-        if (forceLangChk) settingsPayload.settings['ai_force_language'] = forceLangChk.checked ? 'true' : 'false';
-    }
-
-    if (category === 'Moderation') {
-        const modLogChk = document.getElementById('chk_mod_log_enabled');
-        if (modLogChk) settingsPayload.settings['mod_log_enabled'] = modLogChk.checked ? 'true' : 'false';
-    }
 
     try {
         const res = await fetch('/api/save-settings', {
@@ -427,25 +415,6 @@ async function saveSettings(event, category) {
     setTimeout(() => {
         statusMsg.classList.add('hidden');
     }, 4000);
-}
-
-// ---------------------------------------------------------------------
-
-async function toggleModule(moduleName, enabled) {
-    try {
-        const res = await fetch('/api/toggle-module', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ module: moduleName, enabled })
-        });
-        const data = await res.json();
-        if (!res.ok || data.status !== 'ok') {
-            alert('Failed to toggle module.');
-        }
-    } catch (err) {
-        console.error('Error toggling module:', err);
-        alert('Error connecting to the server.')
-    }
 }
 
 // ---------------------------------------------------------------------
@@ -528,34 +497,6 @@ async function saveYouTubeOAuthToken() {
 }
 
 // ---------------------------------------------------------------------
-
-// Call the function as soon as the page loads
-// Show only the API key field relevant to the currently selected Translator provider
-function toggleTranslatorProviderFields() {
-    const select = document.getElementById('set_translator_provider');
-    const deeplBlock = document.getElementById('translator-deepl-key-block');
-    const googleBlock = document.getElementById('translator-google-key-block');
-    if (!select || !deeplBlock || !googleBlock) return;
-
-    const isDeepl = select.value === 'deepl';
-    deeplBlock.classList.toggle('hidden', !isDeepl);
-    googleBlock.classList.toggle('hidden', isDeepl);
-}
-
-// Show only the API key field relevant to the currently selected AI provider
-function toggleAiProviderFields() {
-    const select = document.getElementById('set_ai_provider');
-    const blocks = {
-        gemini: document.getElementById('ai-gemini-key-block'),
-        deepseek: document.getElementById('ai-deepseek-key-block'),
-        chatgpt: document.getElementById('ai-chatgpt-key-block'),
-    };
-    if (!select || !blocks.gemini || !blocks.deepseek || !blocks.chatgpt) return;
-
-    Object.entries(blocks).forEach(([provider, block]) => {
-        block.classList.toggle('hidden', select.value !== provider);
-    });
-}
 
 // ---------------------------------------------------------------------
 // DASHBOARD STATS (uptime / CPU / RAM)
@@ -698,8 +639,6 @@ function connectLogsWebSocket() {
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
     loadMusicBots();
-    toggleTranslatorProviderFields();
-    toggleAiProviderFields();
     loadYouTubeOAuthStatus();
     initStats();
     connectLogsWebSocket();
@@ -737,27 +676,6 @@ async function saveSystemSettings(event) {
     }
 }
 
-// Switch sub-categories inside Modules tab
-function switchModuleCategory(catName) {
-    document.querySelectorAll('.module-form').forEach(form => {
-        form.classList.add('hidden');
-    });
-
-    document.querySelectorAll('.module-cat-btn').forEach(btn => {
-        btn.className = 'module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
-    });
-
-    const activeForm = document.getElementById(`form-module-${catName}`);
-    if (activeForm) {
-        activeForm.classList.remove('hidden');
-    }
-
-    const activeBtn = document.getElementById(`mod-btn-${catName}`);
-    if (activeBtn) {
-        activeBtn.className = 'module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white';
-    }
-}
-
 // Switch sub-categories inside Settings tab
 function switchSettingsCategory(catName) {
     document.querySelectorAll('.settings-form').forEach(form => {
@@ -772,6 +690,8 @@ function switchSettingsCategory(catName) {
     if (activeForm) {
         activeForm.classList.remove('hidden');
     }
+
+    if (catName === 'AI') loadProviders();
 
     const activeBtn = document.getElementById(`cat-btn-${catName}`);
     if (activeBtn) {
@@ -798,53 +718,11 @@ function switchTab(tabName) {
     if (activeBtn) {
         activeBtn.className = 'tab-btn px-4 py-2 rounded text-sm font-semibold transition bg-indigo-600 text-white';
     }
-}
 
-// Add handler for 'Music' module in saveSettings function
-const originalSaveSettings = window.saveSettings;
-window.saveSettings = async function (event, category) {
-    if (category === 'Music') {
-        const musicChk = document.getElementById('chk_music_enabled');
-        if (musicChk) {
-            // Include music module toggle into generic settings payload
-            const isCogTab = !document.getElementById('tab-cogs').classList.contains('hidden');
-            const statusMsg = isCogTab
-                ? document.getElementById('moduleStatusMsg')
-                : document.getElementById('settingsStatusMsg');
-
-            const settingsPayload = {
-                category: 'Modules',
-                settings: {
-                    music_enabled: musicChk.checked ? 'true' : 'false'
-                }
-            };
-
-            try {
-                const res = await fetch('/api/save-settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(settingsPayload)
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    statusMsg.textContent = `✅ ${data.message || 'Music module settings saved'}`;
-                    statusMsg.className = 'text-sm font-semibold p-3 rounded bg-[#2b2d31] border border-green-500/50 text-green-400 text-center';
-                } else {
-                    statusMsg.textContent = `❌ ${data.detail || 'Error saving settings'}`;
-                    statusMsg.className = 'text-sm font-semibold p-3 rounded bg-[#2b2d31] border border-red-500/50 text-red-400 text-center';
-                }
-            } catch (err) {
-                statusMsg.textContent = '❌ Error connecting to server';
-                statusMsg.className = 'text-sm font-semibold p-3 rounded bg-[#2b2d31] border border-red-500/50 text-red-400 text-center';
-            }
-            statusMsg.classList.remove('hidden');
-            setTimeout(() => statusMsg.classList.add('hidden'), 4000);
-            event.preventDefault();
-            return;
-        }
+    if (tabName === 'plugins') {
+        loadPlugins();
     }
-    return originalSaveSettings(event, category);
-};
+}
 
 // ---------------------------- MUSIC BOTS LOGIC ----------------------------
 
@@ -1001,4 +879,660 @@ async function handleToggle(event, botId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bot_rowid: botId })
     });
+}
+// ---------------------------------------------------------------------
+// PLUGINS
+//
+// Nothing here knows about any particular plugin: each one declares its
+// settings in its own Python code, the bot serves that schema, and the cards
+// and forms below are generated from it.
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+// One form row, rendered according to the field's declared type.
+function renderPluginField(pluginId, field, value) {
+    const inputId = `plg_${pluginId}_${field.key}`;
+    const base = 'w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition';
+    const label = `<label class="block text-xs font-bold text-gray-400 uppercase mb-1">${escapeHtml(field.label)}</label>`;
+    const hint = field.description
+        ? `<p class="text-[11px] text-gray-400 mt-1">${escapeHtml(field.description)}</p>`
+        : '';
+
+    let input;
+    switch (field.type) {
+        case 'bool':
+            return `
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147]">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase">${escapeHtml(field.label)}</span>
+                        ${field.description ? `<span class="text-[10px] text-gray-400">${escapeHtml(field.description)}</span>` : ''}
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="bool"
+                            ${value === true || value === 'true' ? 'checked' : ''} class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>`;
+
+        case 'select':
+            input = `<select id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="select" class="${base}">
+                ${field.choices.map(c =>
+                    `<option value="${escapeHtml(c.value)}" ${String(value) === c.value ? 'selected' : ''}>${escapeHtml(c.label)}</option>`
+                ).join('')}
+            </select>`;
+            break;
+
+        case 'text':
+            input = `<textarea id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="text" rows="4" class="${base}">${escapeHtml(value)}</textarea>`;
+            break;
+
+        case 'secret':
+            // Same reveal-on-hover treatment the other API key fields use.
+            input = `<input type="password" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="secret"
+                value="${escapeHtml(value)}" autocomplete="off"
+                onmouseenter="this.type='text'" onmouseleave="this.type='password'"
+                class="${base} font-mono">`;
+            break;
+
+        case 'slider':
+            input = `<div class="flex items-center gap-3">
+                <input type="range" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="slider"
+                    min="${field.min}" max="${field.max}" step="${field.step ?? 0.1}" value="${escapeHtml(value)}"
+                    oninput="document.getElementById('${inputId}_out').textContent = this.value"
+                    class="flex-1 accent-indigo-600">
+                <span id="${inputId}_out" class="text-xs text-gray-300 font-mono w-10 text-right">${escapeHtml(value)}</span>
+            </div>`;
+            break;
+
+        case 'int':
+        case 'float':
+        case 'channel':
+        case 'role':
+            input = `<input type="number" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="${field.type}"
+                value="${escapeHtml(value)}" ${field.type === 'float' ? 'step="any"' : ''}
+                ${field.min !== null && field.min !== undefined ? `min="${field.min}"` : ''}
+                ${field.max !== null && field.max !== undefined ? `max="${field.max}"` : ''}
+                class="${base} font-mono">`;
+            break;
+
+        default:
+            input = `<input type="text" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="string"
+                value="${escapeHtml(value)}" class="${base}">`;
+    }
+
+    return `<div>${label}${input}${hint}</div>`;
+}
+
+// Which cards are open. Kept across re-renders so toggling or reloading a
+// plugin doesn't collapse everything the user had expanded.
+const expandedPlugins = new Set();
+
+function togglePluginCard(pluginId) {
+    const body = document.getElementById(`plugin-body-${pluginId}`);
+    if (!body) return;
+
+    const opening = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !opening);
+    if (opening) {
+        expandedPlugins.add(pluginId);
+    } else {
+        expandedPlugins.delete(pluginId);
+    }
+
+    const chevron = document.getElementById(`plugin-chevron-${pluginId}`);
+    if (chevron) chevron.classList.toggle('rotate-90', opening);
+}
+
+function renderPluginCard(plugin) {
+    const values = plugin.values || {};
+    const statusText = plugin.running
+        ? '<span class="text-[10px] text-green-400 font-semibold">● RUNNING</span>'
+        : (plugin.enabled
+            ? '<span class="text-[10px] text-red-400 font-semibold">● FAILED</span>'
+            : '<span class="text-[10px] text-gray-500 font-semibold">● DISABLED</span>');
+
+    // Shown outside the collapsible body: a plugin that failed to load should
+    // say so without the user having to open it first.
+    const error = plugin.error
+        ? `<p class="text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2 font-mono mx-5 mb-4">${escapeHtml(plugin.error)}</p>`
+        : '';
+
+    // Settings are only readable while the plugin is running, since the schema
+    // lives in the plugin's own code.
+    const fields = (plugin.settings_schema || [])
+        .map(f => renderPluginField(plugin.id, f, values[f.key]))
+        .join('');
+
+    const expandable = plugin.running && fields;
+    const isOpen = expandable && expandedPlugins.has(plugin.id);
+
+    const chevron = expandable
+        ? `<span id="plugin-chevron-${plugin.id}"
+               class="text-gray-500 text-xs mt-1.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}">▶</span>`
+        : '<span class="w-2"></span>';
+
+    // A plugin with nothing to configure shouldn't look clickable.
+    const hint = plugin.running && !fields
+        ? '<span class="text-[10px] text-gray-600">· no settings</span>'
+        : '';
+
+    const header = expandable
+        ? `class="flex items-start justify-between gap-4 p-5 cursor-pointer hover:bg-[#313338] transition rounded-lg"
+           onclick="togglePluginCard('${plugin.id}')"`
+        : 'class="flex items-start justify-between gap-4 p-5"';
+
+    const body = expandable
+        ? `<div id="plugin-body-${plugin.id}" class="${isOpen ? '' : 'hidden'} px-5 pb-5 space-y-4 border-t border-[#3f4147] pt-4">
+               ${fields}
+               <button onclick="savePluginSettings('${plugin.id}')"
+                   class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm">
+                   💾 Save settings
+               </button>
+           </div>`
+        : '';
+
+    return `
+    <div class="bg-[#2b2d31] rounded-lg border border-[#3f4147] shadow-lg">
+        <div ${header}>
+            <div class="flex items-start gap-3">
+                ${chevron}
+                <span class="text-2xl leading-none">${escapeHtml(plugin.icon)}</span>
+                <div>
+                    <h3 class="text-white font-bold flex items-center gap-2">
+                        ${escapeHtml(plugin.name)}
+                        <span class="text-[10px] text-gray-500 font-mono">v${escapeHtml(plugin.version)}</span>
+                        ${statusText}
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1">${escapeHtml(plugin.description)}</p>
+                    <p class="text-[10px] text-gray-500 mt-1 font-mono">
+                        ${escapeHtml(plugin.id)}${plugin.author ? ' · ' + escapeHtml(plugin.author) : ''} · ${escapeHtml(plugin.installed_from)} ${hint}
+                    </p>
+                </div>
+            </div>
+            <!-- The controls sit inside the clickable header, so their clicks
+                 must not also open or close the card. -->
+            <div class="flex items-center gap-3 shrink-0" onclick="event.stopPropagation()">
+                ${plugin.installed_from !== 'local' ? `
+                <button onclick="uninstallPlugin('${plugin.id}')" title="Remove this plugin's files"
+                    class="bg-[#1e1f22] hover:bg-red-600/80 border border-[#3f4147] text-gray-300 hover:text-white px-3 py-1.5 rounded transition text-xs font-semibold">
+                    🗑
+                </button>` : ''}
+                <button onclick="reloadPlugin('${plugin.id}')" title="Reload this plugin's code without restarting the bot"
+                    class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 px-3 py-1.5 rounded transition text-xs font-semibold">
+                    ♻️ Reload
+                </button>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" ${plugin.enabled ? 'checked' : ''}
+                        onchange="togglePlugin('${plugin.id}', this.checked)" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+            </div>
+        </div>
+        ${error}
+        ${body}
+    </div>`;
+}
+
+async function loadPlugins() {
+    const list = document.getElementById('pluginsList');
+    if (!list) return;
+
+    try {
+        const res = await fetch('/api/plugins');
+        const data = await res.json();
+
+        if (!res.ok) {
+            list.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the bot.')}</p>`;
+            return;
+        }
+
+        const plugins = data.plugins || [];
+        list.innerHTML = plugins.length
+            ? plugins.map(renderPluginCard).join('')
+            : '<p class="text-xs text-gray-400">No plugins installed yet.</p>';
+    } catch (e) {
+        list.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function rescanPlugins() {
+    try {
+        await fetch('/api/plugins/rescan', { method: 'POST' });
+    } catch (e) {
+        // loadPlugins() reports the failure to the user.
+    }
+    loadPlugins();
+}
+
+async function togglePlugin(pluginId, enabled) {
+    try {
+        const res = await fetch('/api/plugins/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId, enabled })
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            alert(`Failed to ${enabled ? 'enable' : 'disable'} ${pluginId}: ${data.detail || 'unknown error'}`);
+        }
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPlugins();
+}
+
+async function reloadPlugin(pluginId) {
+    try {
+        const res = await fetch('/api/plugins/reload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId })
+        });
+        const data = await res.json();
+        alert(res.ok ? `${pluginId} reloaded.` : `Reload failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPlugins();
+}
+
+async function savePluginSettings(pluginId) {
+    const values = {};
+    document.querySelectorAll(`[id^="plg_${pluginId}_"]`).forEach(el => {
+        const key = el.dataset.key;
+        if (!key) return;
+        values[key] = el.dataset.type === 'bool' ? el.checked : el.value;
+    });
+
+    try {
+        const res = await fetch('/api/plugins/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId, values })
+        });
+        const data = await res.json();
+        alert(res.ok ? 'Settings saved.' : `Save failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+}
+
+// ---------------------------------------------------------------------
+// PLUGIN BROWSER
+//
+// The bot cannot install anything itself: the plugins directory and the trust
+// configuration are read-only in its container. Everything here goes through
+// the bot to the broker, which is the only component allowed to write them.
+
+function switchPluginView(view) {
+    document.querySelectorAll('.plugin-view').forEach(pane => pane.classList.add('hidden'));
+    document.querySelectorAll('.plugin-view-btn').forEach(btn => {
+        btn.className = 'plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
+    });
+
+    const paneId = { installed: 'pluginInstalled', browse: 'pluginBrowse', sources: 'pluginSources' }[view];
+    const pane = document.getElementById(paneId);
+    if (pane) pane.classList.remove('hidden');
+
+    const btn = document.getElementById(`plgview-btn-${view}`);
+    if (btn) btn.className = 'plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white';
+
+    if (view === 'browse') loadCatalog();
+    if (view === 'sources') loadPluginSources();
+    if (view === 'installed') loadPlugins();
+}
+
+function trustBadge(trusted) {
+    return trusted
+        ? '<span class="text-[10px] text-green-400 font-semibold">✓ TRUSTED</span>'
+        : '<span class="text-[10px] text-amber-400 font-semibold">⚠ UNTRUSTED</span>';
+}
+
+function renderCatalogEntry(entry) {
+    const services = (entry.services || []).length
+        ? `<span class="text-[10px] text-amber-400" title="This plugin runs a container of its own">📦 runs ${escapeHtml((entry.services || []).join(', '))}</span>`
+        : '';
+
+    const action = entry.installed
+        ? `<button onclick="installPlugin('${entry.source}', '${entry.id}')"
+               class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 px-3 py-1.5 rounded transition text-xs font-semibold">
+               ⬆ Reinstall
+           </button>
+           <button onclick="uninstallPlugin('${entry.id}')"
+               class="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded transition text-xs font-semibold">
+               🗑 Uninstall
+           </button>`
+        : `<button onclick="installPlugin('${entry.source}', '${entry.id}')"
+               class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded transition text-xs font-bold">
+               ⬇ Install
+           </button>`;
+
+    const installedNote = entry.installed
+        ? `<span class="text-[10px] text-gray-500">installed v${escapeHtml(entry.installed_version || '?')}</span>`
+        : '';
+
+    return `
+    <div class="bg-[#2b2d31] p-5 rounded-lg border border-[#3f4147] shadow-lg flex items-start justify-between gap-4">
+        <div class="flex items-start gap-3">
+            <span class="text-2xl leading-none">${escapeHtml(entry.icon || '🧩')}</span>
+            <div>
+                <h3 class="text-white font-bold flex items-center gap-2 flex-wrap">
+                    ${escapeHtml(entry.name || entry.id)}
+                    <span class="text-[10px] text-gray-500 font-mono">v${escapeHtml(entry.version || '?')}</span>
+                    ${trustBadge(entry.trusted)}
+                    ${installedNote}
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">${escapeHtml(entry.description || '')}</p>
+                <p class="text-[10px] text-gray-500 mt-1 font-mono">
+                    ${escapeHtml(entry.id)}${entry.author ? ' · ' + escapeHtml(entry.author) : ''} · from ${escapeHtml(entry.source_label || entry.source)}
+                    ${services}
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">${action}</div>
+    </div>`;
+}
+
+async function loadCatalog() {
+    const list = document.getElementById('pluginCatalog');
+    if (!list) return;
+    list.innerHTML = '<p class="text-xs text-gray-400">Loading catalogue...</p>';
+
+    try {
+        const res = await fetch('/api/plugins/catalog');
+        const data = await res.json();
+        if (!res.ok) {
+            list.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
+            return;
+        }
+
+        // A source that cannot be reached is reported rather than silently
+        // dropped, so a typo in a repo name is visible.
+        const errors = Object.entries(data.errors || {})
+            .map(([name, message]) =>
+                `<p class="text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2 font-mono">${escapeHtml(name)}: ${escapeHtml(message)}</p>`)
+            .join('');
+
+        const entries = (data.plugins || []).map(renderCatalogEntry).join('');
+        list.innerHTML = errors + (entries || '<p class="text-xs text-gray-400">No plugins offered by the configured sources.</p>');
+    } catch (e) {
+        list.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function installPlugin(source, pluginId) {
+    if (!confirm(`Install "${pluginId}" from "${source}"?\n\nThis runs someone else's code inside your bot.`)) return;
+
+    try {
+        const res = await fetch('/api/plugins/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source, plugin: pluginId })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(`Install failed: ${data.detail || 'unknown error'}`);
+        } else if (data.error) {
+            alert(`${pluginId} was installed but failed to load:\n\n${data.error}`);
+        } else {
+            alert(`${pluginId} installed${data.running ? ' and running' : ''}.`);
+        }
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadCatalog();
+}
+
+async function uninstallPlugin(pluginId) {
+    if (!confirm(`Uninstall "${pluginId}"?\n\nIts files and any containers it started are removed. Its saved settings are kept.`)) return;
+
+    try {
+        const res = await fetch('/api/plugins/uninstall', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(`Uninstall failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    // Called from both the catalogue and the installed list, so refresh
+    // whichever pane is actually on screen.
+    if (!document.getElementById('pluginBrowse').classList.contains('hidden')) {
+        loadCatalog();
+    } else {
+        loadPlugins();
+    }
+}
+
+function renderSourceRow(source, installedCount) {
+    return `
+    <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] flex items-center justify-between gap-4">
+        <div>
+            <h4 class="text-white font-bold text-sm flex items-center gap-2">
+                ${escapeHtml(source.label || source.name)} ${trustBadge(source.trusted)}
+            </h4>
+            <p class="text-[11px] text-gray-400 mt-1 font-mono">
+                ${escapeHtml(source.repo)} · ${escapeHtml(source.branch)}
+                ${installedCount ? `· ${installedCount} installed` : ''}
+            </p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+            <label class="flex items-center gap-2 cursor-pointer" title="Trusted sources may run sidecar containers">
+                <span class="text-[10px] text-gray-400 uppercase font-bold">Trusted</span>
+                <span class="relative inline-flex items-center">
+                    <input type="checkbox" ${source.trusted ? 'checked' : ''}
+                        onchange="setSourceTrust('${source.name}', this.checked)" class="sr-only peer">
+                    <span class="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></span>
+                </span>
+            </label>
+            <button onclick="removePluginSource('${source.name}')"
+                class="bg-[#1e1f22] hover:bg-red-600/80 border border-[#3f4147] text-gray-300 hover:text-white px-3 py-1.5 rounded transition text-xs font-semibold">
+                Remove
+            </button>
+        </div>
+    </div>`;
+}
+
+async function loadPluginSources() {
+    const list = document.getElementById('sourcesList');
+    if (!list) return;
+
+    try {
+        const res = await fetch('/api/plugins/sources');
+        const data = await res.json();
+        if (!res.ok) {
+            list.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
+            return;
+        }
+
+        const installed = data.installed || {};
+        const counts = {};
+        Object.values(installed).forEach(entry => {
+            counts[entry.source] = (counts[entry.source] || 0) + 1;
+        });
+
+        const rows = (data.sources || []).map(s => renderSourceRow(s, counts[s.name] || 0)).join('');
+        list.innerHTML = rows || '<p class="text-xs text-gray-400">No sources configured.</p>';
+    } catch (e) {
+        list.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function addPluginSource() {
+    const name = document.getElementById('source-name').value.trim();
+    const repo = document.getElementById('source-repo').value.trim();
+    const branch = document.getElementById('source-branch').value.trim() || 'main';
+
+    if (!name || !repo) {
+        alert('A short name and an owner/repository are both required.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/plugins/sources/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, repo, branch, label: name })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(`Could not add the source: ${data.detail || 'unknown error'}`);
+        } else {
+            document.getElementById('source-name').value = '';
+            document.getElementById('source-repo').value = '';
+        }
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPluginSources();
+}
+
+async function setSourceTrust(name, trusted) {
+    if (trusted && !confirm(
+        `Mark "${name}" as trusted?\n\nPlugins from a trusted source are allowed to start containers of their own.`
+    )) {
+        loadPluginSources();
+        return;
+    }
+
+    try {
+        await fetch('/api/plugins/sources/trust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, trusted })
+        });
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPluginSources();
+}
+
+async function removePluginSource(name) {
+    if (!confirm(`Remove the source "${name}"?\n\nPlugins already installed from it stay, but stop being trusted.`)) return;
+
+    try {
+        await fetch('/api/plugins/sources/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, trusted: false })
+        });
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPluginSources();
+}
+
+// ---------------------------------------------------------------------
+// PROVIDERS (AI)
+//
+// The broker holds these keys in a volume the bot container cannot see, and
+// never returns their values — only whether each one is set. So this form is
+// built from that metadata, and an untouched field means "leave as is".
+//
+// Only credentials live here. A plugin that can pick between backends declares
+// that choice as its own setting instead — the translator's free-or-AI switch,
+// for one.
+
+const PROVIDER_SECTIONS = [
+    {
+        section: 'ai',
+        title: 'AI chat',
+        choices: [['gemini', 'Google Gemini'], ['deepseek', 'DeepSeek'], ['chatgpt', 'ChatGPT']],
+        keys: [
+            ['gemini_api_key', 'Gemini API key'],
+            ['deepseek_api_key', 'DeepSeek API key'],
+            ['chatgpt_api_key', 'ChatGPT API key'],
+        ],
+    },
+];
+
+function renderProviderSection(spec, state) {
+    const configured = (state && state.configured) || {};
+    const current = (state && state.provider) || spec.choices[0][0];
+
+    const options = spec.choices
+        .map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+        .join('');
+
+    const keys = spec.keys.map(([key, label]) => `
+        <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">
+                ${escapeHtml(label)}
+                ${configured[key]
+                    ? '<span class="text-[10px] text-green-400 font-semibold ml-1">✓ set</span>'
+                    : '<span class="text-[10px] text-gray-500 font-semibold ml-1">not set</span>'}
+            </label>
+            <input type="password" id="prov_${spec.section}_${key}" autocomplete="off"
+                placeholder="${configured[key] ? 'Saved — type to replace' : 'Not set'}"
+                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
+        </div>`).join('');
+
+    return `
+    <div class="space-y-4 pb-5 border-b border-[#3f4147] last:border-0">
+        <h4 class="text-sm font-bold text-white">${escapeHtml(spec.title)}</h4>
+        <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Provider</label>
+            <select id="prov_${spec.section}_provider"
+                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+                ${options}
+            </select>
+            ${spec.hint ? `<p class="text-[11px] text-gray-400 mt-1">${escapeHtml(spec.hint)}</p>` : ''}
+        </div>
+        ${keys}
+        <button onclick="saveProviders('${spec.section}')"
+            class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm">
+            💾 Save
+        </button>
+    </div>`;
+}
+
+async function loadProviders() {
+    const host = document.getElementById('providersForm');
+    if (!host) return;
+
+    try {
+        const res = await fetch('/api/providers');
+        const data = await res.json();
+        if (!res.ok) {
+            host.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
+            return;
+        }
+        host.innerHTML = PROVIDER_SECTIONS
+            .map(spec => renderProviderSection(spec, (data.providers || {})[spec.section]))
+            .join('');
+    } catch (e) {
+        host.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function saveProviders(section) {
+    const spec = PROVIDER_SECTIONS.find(s => s.section === section);
+    if (!spec) return;
+
+    const values = { provider: document.getElementById(`prov_${section}_provider`).value };
+    // An empty field means "keep whatever is stored", so a saved key survives
+    // saving the form without retyping it.
+    spec.keys.forEach(([key]) => {
+        const el = document.getElementById(`prov_${section}_${key}`);
+        if (el && el.value.trim()) values[key] = el.value.trim();
+    });
+
+    try {
+        const res = await fetch('/api/providers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ section, values })
+        });
+        const data = await res.json();
+        alert(res.ok ? 'Provider settings saved.' : `Save failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadProviders();
 }

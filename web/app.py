@@ -1,4 +1,3 @@
-from dopplerbot.database import update_music_bot, add_music_bot, remove_music_bot, get_all_music_bots
 import asyncio
 import json
 import os
@@ -21,7 +20,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from utils.i18n import get_translations
 
+from dopplerbot import __version__ as DOPPLER_VERSION
 from dopplerbot.database import get_settings, get_settings_by_category, set_settings
+from dopplerbot.plugins.api import SettingType
+from dopplerbot.plugins.manifest import CURRENT_API_VERSION
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -50,8 +52,6 @@ EMBED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 EMBED_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 EMBED_IMAGE_ALLOWED_EXT = {".png", ".jpg", ".jpeg"}
 
-LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
-LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
 LOG_PATH = BASE_DIR / "latest.log"
 
@@ -80,6 +80,10 @@ LOGIN_STATE_TTL_SECONDS = 600
 # Paths reachable without being logged in.
 PUBLIC_PATHS = {"/auth/login", "/auth/callback"}
 PUBLIC_PREFIXES = ("/static/",)
+# Reachable without a session only while setup is unfinished — there is no
+# token to log in with yet. Once it is done these fall back under the login
+# check like everything else, so they cannot be used to overwrite the token.
+SETUP_PREFIXES = ("/setup", "/api/setup/")
 
 # The OAuth2 "Client ID" is the bot application's own ID, so it's looked up from
 # Discord with the bot token already on hand rather than asking anyone to copy it.
@@ -114,6 +118,14 @@ async def get_discord_client_id() -> str | None:
     return _cached_client_id
 
 
+# Until both of these exist the dashboard has nothing to authenticate against,
+# so every request is sent to the first-run setup page. Requiring the client
+# secret here — not just the token — is what makes login mandatory rather than
+# optional: there is no path to a working dashboard that skips it.
+def is_setup_complete() -> bool:
+    return bool(os.getenv("DISCORD_BOT_TOKEN") and os.getenv("DISCORD_CLIENT_SECRET"))
+
+
 # Login turns itself on — no separate switch — the moment everything it needs
 # exists: a bot token, a locked home guild (so there's something to check
 # ownership/Administrator against), and a Client Secret. Until then the
@@ -132,6 +144,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
+
+        if not is_setup_complete():
+            if path.startswith(SETUP_PREFIXES):
+                return await call_next(request)
+            if path.startswith("/api/") or path.startswith("/ws/"):
+                return JSONResponse({"detail": "Setup required"}, status_code=503)
+            return RedirectResponse("/setup")
 
         if not await is_login_configured():
             return await call_next(request)
@@ -152,7 +171,14 @@ app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="
 # ---------------------------------------------------------------------
 
 async def get_bot_info() -> dict:
-    headers = {"Authorization": f"Bot {TOKEN}"}
+    # Read at call time, not from the import-time constant: on a fresh install
+    # this process starts with no token, and the one entered during setup would
+    # otherwise be invisible here until the container was restarted.
+    token = os.getenv("DISCORD_BOT_TOKEN", "")
+    if not token:
+        return {"username": "Discord Bot", "global_name": "Discord Bot", "avatar_url": None}
+
+    headers = {"Authorization": f"Bot {token}"}
 
     async with httpx.AsyncClient() as client:
         try:
@@ -185,12 +211,7 @@ async def get_dashboard(request: Request):
     bot_info = await get_bot_info()
 
     settings_main = await get_settings_by_category("Main")
-    settings_ai = await get_settings_by_category("AI")
-    settings_voice = await get_settings_by_category("Voice")
     settings_modules = await get_settings_by_category("Modules")
-    settings_moderation = await get_settings_by_category("Moderation")
-    settings_translator = await get_settings_by_category("Translator")
-    settings_serverprotect = await get_settings_by_category("ServerProtect")
 
     t = get_translations("en")
 
@@ -201,18 +222,231 @@ async def get_dashboard(request: Request):
             "t": t,
             "bot": bot_info,
             "settings_main": settings_main,
-            "settings_ai": settings_ai,
-            "settings_voice": settings_voice,
             "settings_modules": settings_modules,
-            "settings_moderation": settings_moderation,
-            "settings_translator": settings_translator,
-            "settings_serverprotect": settings_serverprotect,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
             "logged_in_username": request.session.get("username", ""),
         }
     )
 
+
+# ---------------------------------------------------------------------
+
+# FIRST-RUN SETUP
+# Both values are verified against Discord before they can be saved, so a typo
+# cannot leave the install in a state where the dashboard is unreachable and the
+# bot will not start.
+
+async def _verify_bot_token(token: str) -> dict:
+    """Ask Discord who this token belongs to. Also yields the client id."""
+    if not token.strip():
+        return {"valid": False, "message": "Enter a bot token."}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{DISCORD_API_BASE}/oauth2/applications/@me",
+                headers={"Authorization": f"Bot {token.strip()}"},
+                timeout=10.0,
+            )
+    except Exception as e:
+        return {"valid": False, "message": f"Could not reach Discord: {e}"}
+
+    if response.status_code == 401:
+        return {"valid": False, "message": "Discord rejected this token."}
+    if response.status_code != 200:
+        return {"valid": False, "message": f"Discord returned HTTP {response.status_code}."}
+
+    app_info = response.json()
+    bot_user = app_info.get("bot") or {}
+    return {
+        "valid": True,
+        "client_id": app_info.get("id"),
+        "application": app_info.get("name", ""),
+        "bot_username": bot_user.get("username", ""),
+    }
+
+
+async def _verify_client_secret(client_id: str, secret: str) -> dict:
+    """Verify the secret by actually using it.
+
+    A client-credentials grant is the only way to tell a correct secret from a
+    plausible-looking one: Discord will not confirm it any other way, and a
+    wrong secret would otherwise only surface as a failed login later.
+    """
+    if not secret.strip():
+        return {"valid": False, "message": "Enter the client secret."}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{DISCORD_API_BASE}/oauth2/token",
+                data={"grant_type": "client_credentials", "scope": "identify"},
+                auth=(client_id, secret.strip()),
+                timeout=10.0,
+            )
+    except Exception as e:
+        return {"valid": False, "message": f"Could not reach Discord: {e}"}
+
+    if response.status_code == 200:
+        return {"valid": True}
+    if response.status_code in (400, 401):
+        return {"valid": False, "message": "Discord rejected this client secret."}
+    return {"valid": False, "message": f"Discord returned HTTP {response.status_code}."}
+
+
+class SetupTokenPayload(BaseModel):
+    token: str
+
+
+class SetupSecretPayload(BaseModel):
+    token: str
+    client_secret: str
+
+
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_page(request: Request):
+    if is_setup_complete():
+        return RedirectResponse("/")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="setup.html",
+        context={
+            "version": DOPPLER_VERSION,
+            "redirect_uri": f"{str(request.base_url).rstrip('/')}/auth/callback",
+            "portal_url": DISCORD_DEVELOPER_PORTAL_URL,
+        },
+    )
+
+
+@app.post("/api/setup/validate-token")
+async def setup_validate_token(payload: SetupTokenPayload):
+    return JSONResponse(await _verify_bot_token(payload.token))
+
+
+@app.post("/api/setup/validate-secret")
+async def setup_validate_secret(payload: SetupSecretPayload):
+    token_check = await _verify_bot_token(payload.token)
+    if not token_check["valid"]:
+        return JSONResponse({"valid": False, "message": "Check the bot token first."})
+
+    return JSONResponse(await _verify_client_secret(token_check["client_id"], payload.client_secret))
+
+
+# Permissions the bundled plugins actually need — deliberately not Administrator:
+# temporary voice channels, moderation, the verified role, and revoking invites
+# during a raid lockdown.
+INVITE_PERMISSIONS = 1099796925494
+
+
+@app.get("/api/setup/status")
+async def setup_status():
+    """Whether the bot is up yet, and whether it has joined a server.
+
+    The setup page waits on this instead of jumping straight to login: the bot
+    container needs a moment to start, and login cannot authorise anyone until
+    the bot is actually in a guild to check ownership against.
+    """
+    client_id = await get_discord_client_id()
+    invite_url = (
+        f"{DISCORD_OAUTH_AUTHORIZE_URL}?client_id={client_id}"
+        f"&scope=bot+applications.commands&permissions={INVITE_PERMISSIONS}"
+        if client_id else None
+    )
+
+    online, guilds = False, 0
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BOT_INTERNAL_API}/internal/stats", timeout=3.0)
+        if response.status_code == 200:
+            stats = response.json()
+            online = bool(stats.get("connected"))
+            guilds = stats.get("guild_count", 0)
+    except Exception:
+        pass  # not up yet; the page keeps waiting
+
+    return JSONResponse({"bot_online": online, "guild_count": guilds, "invite_url": invite_url})
+
+
+@app.post("/api/setup/save")
+async def setup_save(payload: SetupSecretPayload):
+    # Re-verified here rather than trusting the browser: the buttons that
+    # enabled saving live on the client, and this endpoint is reachable without
+    # them.
+    token_check = await _verify_bot_token(payload.token)
+    if not token_check["valid"]:
+        raise HTTPException(status_code=400, detail=token_check.get("message", "Invalid bot token."))
+
+    secret_check = await _verify_client_secret(token_check["client_id"], payload.client_secret)
+    if not secret_check["valid"]:
+        raise HTTPException(status_code=400, detail=secret_check.get("message", "Invalid client secret."))
+
+    token = payload.token.strip()
+    secret = payload.client_secret.strip()
+
+    update_env_file("DISCORD_BOT_TOKEN", token)
+    update_env_file("DISCORD_CLIENT_SECRET", secret)
+    os.environ["DISCORD_BOT_TOKEN"] = token
+    os.environ["DISCORD_CLIENT_SECRET"] = secret
+
+    # The bot container is not shown .env, and compose only reads it when the
+    # stack comes up — so the token also goes in the database, where the bot
+    # looks on its next restart.
+    await set_settings("discord_bot_token", token, "Main")
+
+    global _cached_client_id
+    _cached_client_id = token_check["client_id"]
+
+    return JSONResponse({
+        "status": "ok",
+        "bot_username": token_check.get("bot_username", ""),
+    })
+
+# ---------------------------------------------------------------------
+
+# PLUGIN API REFERENCE
+# Served from the dashboard rather than linked out: it then matches the version
+# actually installed, and stays available on a LAN-only deployment.
+
+# What each declared setting type renders as. Built by iterating the enum, so a
+# type added to the code and not described here still shows up in the table
+# instead of quietly going missing from the docs.
+_SETTING_TYPE_NOTES = {
+    SettingType.STRING: "Single-line text input.",
+    SettingType.TEXT: "Multi-line textarea — for a system prompt or a long template.",
+    SettingType.SECRET: "Password-style input, masked in the panel and revealed on hover.",
+    SettingType.INT: "Whole number. Honours min and max.",
+    SettingType.FLOAT: "Decimal number.",
+    SettingType.BOOL: "Toggle switch. Coerced to a real bool when read.",
+    SettingType.SELECT: "Dropdown. Requires choices=((value, label), ...).",
+    SettingType.SLIDER: "Range slider. Requires min and max; step defaults to 0.1.",
+    SettingType.CHANNEL: "Discord channel ID. Read back as an int.",
+    SettingType.ROLE: "Discord role ID. Read back as an int.",
+}
+
+
+@app.get("/docs/plugins", response_class=HTMLResponse)
+async def plugin_api_docs(request: Request):
+    setting_types = [
+        {
+            "value": member.value,
+            "note": _SETTING_TYPE_NOTES.get(member, ""),
+        }
+        for member in SettingType
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="plugin_api.html",
+        context={
+            "version": DOPPLER_VERSION,
+            "api_version": CURRENT_API_VERSION,
+            "setting_types": setting_types,
+        },
+    )
+
+# ---------------------------------------------------------------------
 
 class EmbedPayload(BaseModel):
     filename: str
@@ -321,151 +555,238 @@ async def save_settings(request: Request):
 
 # ---------------------------------------------------------------------
 
-MODULE_TOGGLE_MAP = {
-    "ai": ("dopplerbot.cogs.ai.AiChat", "AI", "ai_enabled"),
-    "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
-    "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
-    "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
-    "translator": ("dopplerbot.cogs.Translator", "Modules", "translator"),
-    "serverprotect": ("dopplerbot.cogs.serverprotect.ServerProtect", "Modules", "server_protect"),
-}
+# ------------------------------PLUGINS--------------------------------
 
-class ModuleTogglePayload(BaseModel):
-    module: str
-    enabled: bool
+# The bot process owns the plugin registry -- it is the one that imports the
+# code and holds the running instances -- so the dashboard only proxies to it.
+BOT_INTERNAL_API = "http://doppler_discord_bot:8001"
+BROKER_API = os.getenv("BROKER_URL", "http://doppler_service_broker:8002")
 
-@app.post("/api/toggle-module")
-async def toggle_module(payload: ModuleTogglePayload):
-    if payload.module not in MODULE_TOGGLE_MAP:
-        raise HTTPException(status_code=400, detail="Unkown module")
 
-    cog_path, category, key_name = MODULE_TOGGLE_MAP[payload.module]
-
-    await set_settings(key_name, "true" if payload.enabled else "false", category)
-
-    action = "load" if payload.enabled else "unload"
-    notified = False
+async def _call_bot(method: str, path: str, payload: dict | None = None) -> dict:
+    """Call the bot's internal API, turning transport errors into HTTP 503."""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://doppler_discord_bot:8001/internal/toggle-cog",
-                json={"cog": cog_path, "action": action},
-                timeout=5.0
-            )
-            notified = response.status_code == 200
+            if method == "GET":
+                response = await client.get(f"{BOT_INTERNAL_API}{path}", timeout=10.0)
+            else:
+                response = await client.post(f"{BOT_INTERNAL_API}{path}", json=payload or {}, timeout=15.0)
     except Exception as e:
-        print(f"Failed to notify bot container: {e}")
+        raise HTTPException(status_code=503, detail=f"Bot is not reachable: {e}") from e
 
-    return JSONResponse({"status": "ok", "module_notified": notified})
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("message", response.text)
+        except Exception:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    return response.json()
+
+
+async def _call_broker(method: str, path: str, payload: dict | None = None) -> dict:
+    """Talk to the broker directly; see BROKER_API above for why."""
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(f"{BROKER_API}{path}", timeout=15.0)
+            else:
+                response = await client.post(f"{BROKER_API}{path}", json=payload or {}, timeout=60.0)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Broker is not reachable: {e}") from e
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("message", response.text)
+        except Exception:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    return response.json()
+
+
+class ProviderPayload(BaseModel):
+    section: str
+    values: dict
+
+
+@app.get("/api/providers")
+async def get_providers():
+    """Provider settings and which keys are set. Never the keys themselves."""
+    return JSONResponse(await _call_broker("GET", "/providers"))
+
+
+@app.post("/api/providers")
+async def set_providers(payload: ProviderPayload):
+    return JSONResponse(await _call_broker(
+        "POST", "/providers", {"section": payload.section, "values": payload.values}
+    ))
+
+
+class PluginTogglePayload(BaseModel):
+    plugin: str
+    enabled: bool
+
+
+class PluginActionPayload(BaseModel):
+    plugin: str
+
+
+class PluginSettingsPayload(BaseModel):
+    plugin: str
+    values: dict
+
+
+@app.get("/api/plugins")
+async def list_plugins():
+    return JSONResponse(await _call_bot("GET", "/internal/plugins"))
+
+
+@app.post("/api/plugins/rescan")
+async def rescan_plugins():
+    """Re-scan the plugins directory, e.g. after a plugin was added on disk."""
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/rescan"))
+
+
+@app.post("/api/plugins/toggle")
+async def toggle_plugin(payload: PluginTogglePayload):
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/plugins/toggle",
+        {"plugin": payload.plugin, "enabled": payload.enabled},
+    ))
+
+
+@app.post("/api/plugins/reload")
+async def reload_plugin(payload: PluginActionPayload):
+    """Swap a plugin's code in place, without restarting the bot."""
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/reload", {"plugin": payload.plugin}))
+
+
+@app.post("/api/plugins/settings")
+async def save_plugin_settings(payload: PluginSettingsPayload):
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/plugins/settings",
+        {"plugin": payload.plugin, "values": payload.values},
+    ))
+
+class SourcePayload(BaseModel):
+    name: str
+    repo: str = ""
+    branch: str = "main"
+    label: str = ""
+
+
+class SourceTrustPayload(BaseModel):
+    name: str
+    trusted: bool
+
+
+class InstallPayload(BaseModel):
+    source: str
+    plugin: str
+
+
+@app.get("/api/plugins/sources")
+async def list_sources():
+    return JSONResponse(await _call_bot("GET", "/internal/sources"))
+
+
+@app.get("/api/plugins/catalog")
+async def plugin_catalog():
+    """Everything the configured sources offer, with install state and trust."""
+    return JSONResponse(await _call_bot("GET", "/internal/catalog"))
+
+
+@app.post("/api/plugins/sources/add")
+async def add_source(payload: SourcePayload):
+    return JSONResponse(await _call_bot("POST", "/internal/sources/add", payload.model_dump()))
+
+
+@app.post("/api/plugins/sources/trust")
+async def trust_source(payload: SourceTrustPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/sources/trust", payload.model_dump()))
+
+
+@app.post("/api/plugins/sources/remove")
+async def remove_source(payload: SourceTrustPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/sources/remove", {"name": payload.name}))
+
+
+@app.post("/api/plugins/install")
+async def install_plugin(payload: InstallPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/install", payload.model_dump()))
+
+
+@app.post("/api/plugins/uninstall")
+async def uninstall_plugin(payload: PluginActionPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/uninstall", {"plugin": payload.plugin}))
 
 # ----------------------------MUSIC BOTS-------------------------------
 
-# MUSIC BOTS ENDPOINTS
+# MUSIC WORKER BOTS
+# The worker accounts belong to the music plugin and live in its own database,
+# so the dashboard no longer reads them directly -- it asks the bot, which
+# updates the row and starts or stops the worker together.
 class MusicBotPayload(BaseModel):
     bot_rowid: int
     bot_token: str
 
-@app.post("/api/music/save-token")
-async def save_music_bot_token(payload: MusicBotPayload):
-    await update_music_bot(payload.bot_rowid, bot_token=payload.bot_token)
-
-    await notify_music_bot(payload.bot_rowid, "stop")
-    notified = await notify_music_bot(payload.bot_rowid, "start")
-
-    return JSONResponse({"status": "ok", "bot_notified": notified})
-
-@app.post("/api/music/add-bot")
-async def add_music_bot_endpoint():
-    bot_rowid = await add_music_bot()
-    return JSONResponse({"status": "ok", "bot_rowid": bot_rowid})
-
-@app.get ("/api/music/bots")
-async def get_music_bots_endpoint():
-    bots = await get_all_music_bots()
-    return JSONResponse({"status": "ok", "bots": bots})
-
-# ---------------------------------------------------------------------
 
 class MusicBotIdPayload(BaseModel):
     bot_rowid: int
 
-@app.post("/api/music/remove-bot")
-async def remove_music_bot_endpoint(payload: MusicBotIdPayload):
-    await notify_music_bot(payload.bot_rowid, "stop")
-    await remove_music_bot(payload.bot_rowid)
-    return JSONResponse({"status": "ok"})
-
-# ---------------------------------------------------------------------
 
 class ToggleBotPayload(BaseModel):
     bot_rowid: int
     is_active: bool
 
+
+@app.get("/api/music/bots")
+async def get_music_bots_endpoint():
+    return JSONResponse(await _call_bot("GET", "/internal/music/bots"))
+
+
+@app.post("/api/music/add-bot")
+async def add_music_bot_endpoint():
+    return JSONResponse(await _call_bot("POST", "/internal/music/add"))
+
+
+@app.post("/api/music/remove-bot")
+async def remove_music_bot_endpoint(payload: MusicBotIdPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/music/remove", {"bot_rowid": payload.bot_rowid}))
+
+
+@app.post("/api/music/save-token")
+async def save_music_bot_token(payload: MusicBotPayload):
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/music/save-token",
+        {"bot_rowid": payload.bot_rowid, "bot_token": payload.bot_token},
+    ))
+
+
 @app.post("/api/music/toggle-active")
 async def toggle_bot_active(payload: ToggleBotPayload):
-    await update_music_bot(payload.bot_rowid, bot_status=int(payload.is_active))
-
-    action = "start" if payload.is_active else "stop"
-    notified = await notify_music_bot(payload.bot_rowid, action)
-
-    return JSONResponse({"status": "ok", "bot_notified": notified})
-
-# ---------------------------------------------------------------------
-
-# MUSIC BOT WHILE ACTIVE STATUS CHANGED
-async def notify_music_bot(bot_rowid: int, action: str) -> bool:
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://doppler_discord_bot:8001/internal/toggle-music-bot",
-                json={"bot_rowid": bot_rowid, "action": action},
-                timeout=5.0
-            )
-            return response.status_code == 200
-    except Exception as e:
-        print(f"Failed to notify bot conatiner about music bot {bot_rowid}: {e}")
-        return False
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/music/set-active",
+        {"bot_rowid": payload.bot_rowid, "is_active": payload.is_active},
+    ))
 
 # ---------------------------OAuth-------------------------------------
-
-@app.get("/api/music/youtube-oauth-status")
-async def get_youtube_oauth_status():
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{LAVALINK_URI}/youtube",
-                headers={"Authorization": LAVALINK_PASSWORD or ""},
-                timeout=5.0
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return JSONResponse({"status": "ok", "configured": data.get("refreshToken") is not None})
-            return JSONResponse({"status": "error", "message": "Lavalink returned an error"}, status_code=502)
-    except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
-
-# ---------------------------------------------------------------------
 
 class YouTubeOAuthPayload(BaseModel):
     refresh_token: str
 
+
+@app.get("/api/music/youtube-oauth-status")
+async def get_youtube_oauth_status():
+    return JSONResponse(await _call_bot("GET", "/internal/music/youtube"))
+
+
 @app.post("/api/music/youtube-oauth")
 async def set_youtube_oauth(payload: YouTubeOAuthPayload):
-    update_env_file("YOUTUBE_OAUTH_REFRESH_TOKEN", payload.refresh_token)
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{LAVALINK_URI}/youtube",
-                headers={"Authorization": LAVALINK_PASSWORD or ""},
-                json={"refreshToken": payload.refresh_token, "skipInitialization": True},
-                timeout=5.0
-            )
-            if response.status_code == 204:
-                return JSONResponse({"status": "ok"})
-            return JSONResponse({"status": "error", "message": "Lavalink rejected the token"}, status_code=400)
-    except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/music/youtube", {"refresh_token": payload.refresh_token}
+    ))
 
 # ---------------------------------------------------------------------
 

@@ -1,41 +1,20 @@
 import discord
 import asyncio
+import httpx
 import os
 import logging
 import math
-import traceback
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
-from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, close_db, get_music_bot
+from dopplerbot import __version__
+from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, delete_setting, close_db
+from dopplerbot.plugins import PluginRegistry
 
 load_dotenv()
 
 STARTED_AT = datetime.now(timezone.utc)
-
-COG_EXTENSIONS = [
-    "dopplerbot.cogs.cogmanager",
-    "dopplerbot.cogs.embed",
-    "dopplerbot.cogs.web_command",
-    "dopplerbot.cogs.Translator",
-    "dopplerbot.cogs.voice.VoiceManager",
-    "dopplerbot.cogs.music.MusicBotsManager",
-    "dopplerbot.cogs.music.MusicCommands",
-    "dopplerbot.cogs.ai.AiChat",
-    "dopplerbot.cogs.moderation.ModerationCommands",
-    "dopplerbot.cogs.serverprotect.ServerProtect",
-]
-
-# Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
-MODULE_CONFIG = {
-    "dopplerbot.cogs.ai.AiChat": ("AI", "ai_enabled"),
-    "dopplerbot.cogs.voice.VoiceManager": ("Voice", "voice_enabled"),
-    "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
-    "dopplerbot.cogs.moderation.ModerationCommands": ("Modules", "moderation"),
-    "dopplerbot.cogs.Translator": ("Modules", "translator"),
-    "dopplerbot.cogs.serverprotect.ServerProtect": ("Modules", "server_protect"),
-}
 
 # LOGGING
 logging.basicConfig(
@@ -55,79 +34,199 @@ intents.guilds = True
 # on_member_join, which Server Protect uses to post the verify prompt.
 intents.members = True
 
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+# Resolved at startup rather than at import: the token may not exist yet on a
+# fresh install, and the dashboard's first-run setup writes it while this
+# container is running.
+async def resolve_token() -> str:
+    token = (os.getenv("DISCORD_BOT_TOKEN") or "").strip()
+    if token:
+        return token
 
-async def get_prefix(bot, message):
-    prefix = await get_settings("prefix", "+")
-    return prefix
+    # This container is deliberately not shown .env, and compose only reads it
+    # when the stack comes up -- so first-run setup also stores the token in the
+    # database, which is where it is picked up from here. No extra exposure:
+    # discord.py holds the token in memory anyway, where plugin code can reach it.
+    return (await get_settings("discord_bot_token", "", category="Main") or "").strip()
 
-bot = commands.Bot(
-    command_prefix=get_prefix,
+
+class DopplerBot(commands.Bot):
+    """Slash commands only.
+
+    commands.Bot stays as the base class because plugins register cogs through
+    it, but prefix processing is switched off. With no prefix commands left,
+    every message would otherwise be parsed as a possible command and each
+    mention logged as CommandNotFound — and the AI plugin exists precisely to
+    be mentioned.
+    """
+
+    async def process_commands(self, message: discord.Message) -> None:
+        return
+
+
+# Required by the constructor and otherwise inert, since the override above
+# means it is never consulted.
+bot = DopplerBot(
+    command_prefix=commands.when_mentioned,
+    # discord.py registers a prefix-based !help by default; with prefix
+    # processing off it could never run, so it should not be registered.
+    help_command=None,
     intents=intents
 )
 
-# ---------------------------------------------------------------------
-
-# RELOAD COG FROM WEB-PANEL
-async def handle_reload_cog(request):
-    data = await request.json()
-    cog_name = data.get("cog")
-    action = data.get("action")
-
-    try:
-        if action == "load":
-            if cog_name not in bot.extensions:
-                await bot.load_extension(cog_name)
-                logging.info(f"Loaded via Webhook: {cog_name}")
-
-        elif action == "unload":
-            if cog_name in bot.extensions:
-                await bot.unload_extension(cog_name)
-                logging.info(f"Unloaded via Webhook: {cog_name}")
-        return web.json_response({"status": "ok"})
-
-    except Exception as e:
-        logging.error(f"Error toggling {cog_name}: {e}")
-        return web.json_response({"status": "error", "message": str(e)}, status=500)
+# Everything the bot does comes from plugins; this process only hosts them.
+bot.plugins = PluginRegistry(bot)
 
 # ---------------------------------------------------------------------
 
-# TOGGLE MUSIC BOTS FROM WEB-PANEL
-async def handle_toggle_music_bot(request):
+# ---------------------------------------------------------------------
+
+# MUSIC WORKER BOTS FROM WEB-PANEL
+# The worker accounts live in the music plugin's own database, so the dashboard
+# cannot read or write them directly -- every change comes through here, which
+# updates the row and starts or stops the matching worker in one step.
+def _music():
+    """The running music plugin and its manager cog, or (None, None)."""
+    entry = bot.plugins.loaded.get("music")
+    if entry is None:
+        return None, None
+    return entry.instance, bot.get_cog("MusicBotsManager")
+
+
+def _music_unavailable():
+    return web.json_response(
+        {"status": "error", "message": "Music plugin is not running"}, status=503
+    )
+
+
+async def handle_music_list(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+    return web.json_response({"status": "ok", "bots": [list(row) for row in await plugin.store.all()]})
+
+
+async def handle_music_add(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+    return web.json_response({"status": "ok", "bot_rowid": await plugin.store.add()})
+
+
+async def handle_music_remove(request):
+    plugin, cog = _music()
+    if plugin is None:
+        return _music_unavailable()
+
     data = await request.json()
     bot_rowid = data.get("bot_rowid")
-    action = data.get("action")
 
-    logging.info(f"Registered cogs: {list(bot.cogs.keys())}")
-    cog = bot.get_cog("MusicBotsManager")
+    if cog is not None:
+        await cog.stop_music_bot(bot_rowid)
+    await plugin.store.remove(bot_rowid)
+    return web.json_response({"status": "ok"})
+
+
+async def handle_music_save_token(request):
+    plugin, cog = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    data = await request.json()
+    bot_rowid = data.get("bot_rowid")
+    token = data.get("bot_token", "")
+
+    await plugin.store.update(bot_rowid, bot_token=token)
+
+    # Restart the worker so it picks up the new token immediately.
+    if cog is not None:
+        await cog.stop_music_bot(bot_rowid)
+        if token:
+            await cog.start_single_bot(bot_rowid, token)
+    return web.json_response({"status": "ok"})
+
+
+async def handle_music_set_active(request):
+    plugin, cog = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    data = await request.json()
+    bot_rowid = data.get("bot_rowid")
+    is_active = bool(data.get("is_active"))
+
+    await plugin.store.update(bot_rowid, bot_status=int(is_active))
 
     if cog is None:
-        return web.json_response({"status": "error", "message": "Music module not loaded"}, status = 400)
-
-    try:
-        if action == "start":
-            bot_data = await get_music_bot(bot_rowid)
-
-            if bot_data is None:
-                return web.json_response({"status": "error", "message": f"Bot with ID {bot_rowid} not found in database",}, status=404,)
-                
-            _, bot_token, _, _ = bot_data
-
-            if not bot_token:
-                return web.json_response({"status": "error", "message": f"Bot {bot_rowid} has no token specified",}, status=400,)
-
-            # pyrefly: ignore [missing-attribute]
-            await cog.start_single_bot(bot_rowid, bot_token)
-
-        elif action == "stop":
-            # pyrefly: ignore [missing-attribute]
-            await cog.stop_music_bot(bot_rowid)
-
         return web.json_response({"status": "ok"})
+
+    if is_active:
+        row = await plugin.store.get(bot_rowid)
+        if row is None:
+            return web.json_response({"status": "error", "message": "Bot not found"}, status=404)
+        if not row[1]:
+            return web.json_response(
+                {"status": "error", "message": "This bot has no token yet"}, status=400
+            )
+        await cog.start_single_bot(bot_rowid, row[1])
+    else:
+        await cog.stop_music_bot(bot_rowid)
+
+    return web.json_response({"status": "ok"})
+
+# Lavalink's address and password are the music plugin's settings now, so the
+# dashboard can no longer talk to Lavalink directly -- these proxy for it.
+async def handle_music_youtube_status(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    settings = await plugin.settings.all()
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings['lavalink_uri']}/youtube",
+                headers={"Authorization": settings["lavalink_password"]},
+                timeout=5.0,
+            )
     except Exception as e:
-        
-        logging.error(f"Error toggiling music bot {bot_rowid}: {e}")
-        return web.json_response({"status": "error", "message": str(e)}, status=500)
+        return web.json_response({"status": "error", "message": str(e)}, status=502)
+
+    if response.status_code != 200:
+        return web.json_response({"status": "error", "message": "Lavalink returned an error"}, status=502)
+
+    return web.json_response(
+        {"status": "ok", "configured": response.json().get("refreshToken") is not None}
+    )
+
+
+async def handle_music_youtube_token(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    data = await request.json()
+    refresh_token = data.get("refresh_token", "")
+
+    # Stored as a plugin setting so it is also handed to the Lavalink container
+    # as environment the next time the sidecar is created.
+    await plugin.settings.set("youtube_oauth_refresh_token", refresh_token)
+
+    settings = await plugin.settings.all()
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings['lavalink_uri']}/youtube",
+                headers={"Authorization": settings["lavalink_password"]},
+                json={"refreshToken": refresh_token, "skipInitialization": True},
+                timeout=5.0,
+            )
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=502)
+
+    if response.status_code != 204:
+        return web.json_response({"status": "error", "message": "Lavalink rejected the token"}, status=400)
+
+    return web.json_response({"status": "ok"})
 
 # ---------------------------------------------------------------------
 
@@ -136,6 +235,7 @@ async def handle_stats(request):
     uptime_seconds = (datetime.now(timezone.utc) - STARTED_AT).total_seconds()
 
     return web.json_response({
+        "version": __version__,
         "started_at": STARTED_AT.isoformat(),
         "uptime_seconds": uptime_seconds,
         "guild_count": len(bot.guilds),
@@ -171,13 +271,186 @@ async def handle_check_admin(request):
 
 # ---------------------------------------------------------------------
 
+# PLUGIN MANAGEMENT FROM WEB-PANEL
+# The dashboard's plugin page is the only way plugins are turned on, off or
+# reloaded; reloading swaps a plugin's code in place, without restarting the bot.
+async def handle_list_plugins(request):
+    return web.json_response({"plugins": await bot.plugins.describe()})
+
+
+async def handle_rescan_plugins(request):
+    """Pick up plugins added on disk (e.g. just installed from the panel)."""
+    bot.plugins.discover()
+    return web.json_response({"status": "ok", "plugins": await bot.plugins.describe()})
+
+
+async def handle_toggle_plugin(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+    enabled = bool(data.get("enabled"))
+
+    if plugin_id not in bot.plugins.manifests:
+        return web.json_response({"status": "error", "message": "Unknown plugin"}, status=404)
+
+    ok = await bot.plugins.set_enabled(plugin_id, enabled)
+    await sync_commands()
+
+    if not ok:
+        return web.json_response(
+            {"status": "error", "message": bot.plugins.errors.get(plugin_id, "Failed to load")},
+            status=500,
+        )
+    return web.json_response({"status": "ok"})
+
+
+async def handle_reload_plugin(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+
+    if plugin_id not in bot.plugins.manifests:
+        return web.json_response({"status": "error", "message": "Unknown plugin"}, status=404)
+
+    ok = await bot.plugins.reload(plugin_id)
+    await sync_commands()
+
+    if not ok:
+        return web.json_response(
+            {"status": "error", "message": bot.plugins.errors.get(plugin_id, "Reload failed")},
+            status=500,
+        )
+    return web.json_response({"status": "ok"})
+
+
+async def handle_plugin_settings(request):
+    """Save a running plugin's settings, validated against its declared schema."""
+    data = await request.json()
+    plugin_id = data.get("plugin")
+    values = data.get("values") or {}
+
+    entry = bot.plugins.loaded.get(plugin_id)
+    if entry is None:
+        return web.json_response(
+            {"status": "error", "message": "Plugin is not running"}, status=400
+        )
+
+    try:
+        for key, value in values.items():
+            await entry.context.settings.set(key, value)
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=400)
+
+    return web.json_response({"status": "ok"})
+
+# ---------------------------------------------------------------------
+
+# PLUGIN SOURCES AND INSTALLATION
+# The broker owns the trust configuration and the plugins directory -- both are
+# read-only in this container -- so everything here is a pass-through. The bot
+# adds only what the broker cannot know: reloading its own registry afterwards.
+BROKER_URL = os.getenv("BROKER_URL", "http://doppler_service_broker:8002")
+
+
+async def _call_broker(method: str, path: str, payload=None):
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(f"{BROKER_URL}{path}", timeout=60.0)
+            else:
+                response = await client.post(f"{BROKER_URL}{path}", json=payload or {}, timeout=300.0)
+    except Exception as e:
+        return web.json_response(
+            {"status": "error", "message": f"Service broker is not reachable: {e}"}, status=503
+        )
+
+    return web.json_response(response.json(), status=response.status_code)
+
+
+async def handle_sources(request):
+    return await _call_broker("GET", "/sources")
+
+
+async def handle_catalog(request):
+    return await _call_broker("GET", "/catalog")
+
+
+async def handle_add_source(request):
+    return await _call_broker("POST", "/sources/add", await request.json())
+
+
+async def handle_trust_source(request):
+    return await _call_broker("POST", "/sources/trust", await request.json())
+
+
+async def handle_remove_source(request):
+    return await _call_broker("POST", "/sources/remove", await request.json())
+
+
+async def handle_install_plugin(request):
+    data = await request.json()
+    response = await _call_broker("POST", "/plugins/install", data)
+    if response.status != 200:
+        return response
+
+    plugin_id = data.get("plugin")
+    bot.plugins.discover()
+
+    if plugin_id in bot.plugins.loaded:
+        # Installing over a running plugin is an upgrade: load() would return
+        # early because it is already loaded, leaving the previous version in
+        # memory with the new files sitting unused on disk.
+        await bot.plugins.reload(plugin_id)
+        await sync_commands()
+    elif await bot.plugins.is_enabled(plugin_id):
+        # Installing something and then having to switch it on separately is a
+        # pointless extra step when the plugin says it wants to be on.
+        await bot.plugins.load(plugin_id)
+        await sync_commands()
+
+    return web.json_response({
+        "status": "ok",
+        "running": plugin_id in bot.plugins.loaded,
+        "error": bot.plugins.errors.get(plugin_id),
+    })
+
+
+async def handle_uninstall_plugin(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+
+    # Unload first: the code has to stop running before its files disappear.
+    await bot.plugins.unload(plugin_id, stop_services=True)
+
+    response = await _call_broker("POST", "/plugins/uninstall", data)
+    bot.plugins.discover()
+    await sync_commands()
+    return response
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
-    app.router.add_post("/internal/toggle-cog", handle_reload_cog)
-    app.router.add_post("/internal/toggle-music-bot", handle_toggle_music_bot)
+    app.router.add_get("/internal/music/bots", handle_music_list)
+    app.router.add_post("/internal/music/add", handle_music_add)
+    app.router.add_post("/internal/music/remove", handle_music_remove)
+    app.router.add_post("/internal/music/save-token", handle_music_save_token)
+    app.router.add_post("/internal/music/set-active", handle_music_set_active)
+    app.router.add_get("/internal/music/youtube", handle_music_youtube_status)
+    app.router.add_post("/internal/music/youtube", handle_music_youtube_token)
     app.router.add_get("/internal/stats", handle_stats)
     app.router.add_post("/internal/check-admin", handle_check_admin)
+    app.router.add_get("/internal/plugins", handle_list_plugins)
+    app.router.add_post("/internal/plugins/rescan", handle_rescan_plugins)
+    app.router.add_post("/internal/plugins/toggle", handle_toggle_plugin)
+    app.router.add_post("/internal/plugins/reload", handle_reload_plugin)
+    app.router.add_post("/internal/plugins/settings", handle_plugin_settings)
+    app.router.add_get("/internal/sources", handle_sources)
+    app.router.add_post("/internal/sources/add", handle_add_source)
+    app.router.add_post("/internal/sources/trust", handle_trust_source)
+    app.router.add_post("/internal/sources/remove", handle_remove_source)
+    app.router.add_get("/internal/catalog", handle_catalog)
+    app.router.add_post("/internal/plugins/install", handle_install_plugin)
+    app.router.add_post("/internal/plugins/uninstall", handle_uninstall_plugin)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
     # stats tab) — per-request access logs here are just noise in latest.log.
     runner = web.AppRunner(app, access_log=None)
@@ -188,25 +461,45 @@ async def start_internal_api():
 
 # ---------------------------------------------------------------------
 
-# COGS LOAD
-async def load_cogs(bot):
-    logging.info("Start loading the cogs...")
+# ---------------------------------------------------------------------
 
-    for cog_name in COG_EXTENSIONS:
-        if cog_name in MODULE_CONFIG:
-            category, key_name = MODULE_CONFIG[cog_name]
-            cat_settings = await get_settings_by_category(category)
-            is_enabled = cat_settings.get(key_name, "true").lower() == "true"
+# PROVIDER KEYS
+# These used to live in the settings table, where any plugin could read them.
+# They belong to the broker now; this removes the copies the bot still holds,
+# but only once the broker confirms it has them -- deleting first would lose
+# them if the broker were unreachable.
+LEGACY_SECRET_ROWS = [
+    ("AI", ("provider", "gemini_api_key", "deepseek_api_key", "chatgpt_api_key"), "ai"),
+    ("translator", ("provider", "deepl_api_key", "google_api_key"), "translate"),
+]
 
-            if not is_enabled:
-                logging.info(f"Skipped disabled cog: {cog_name}")
+
+async def drop_migrated_provider_keys():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BROKER_URL}/providers", timeout=15.0)
+        providers = response.json()["providers"]
+    except Exception as e:
+        logging.warning("Could not confirm provider keys with the broker (%s); keeping them for now.", e)
+        return
+
+    removed = 0
+    for category, keys, section in LEGACY_SECRET_ROWS:
+        held = providers.get(section, {})
+        configured = held.get("configured", {})
+        stored = await get_settings_by_category(category)
+        for key in keys:
+            if key not in stored:
                 continue
+            # A blank row is safe to drop. Otherwise it goes only once the
+            # broker confirms it holds that value -- either as a set credential
+            # or, for plain settings like the provider choice, as a field.
+            if not stored[key] or configured.get(key) or key in held:
+                await delete_setting(category, key)
+                removed += 1
 
-        try:
-            await bot.load_extension(cog_name)
-            logging.info(f"Loaded: {cog_name}")
-        except Exception as e:
-            logging.error(f"Error in {cog_name}:\n{traceback.format_exc()}")
+    if removed:
+        logging.info("Removed %d provider key row(s) now held by the broker.", removed)
 
 # ---------------------------------------------------------------------
 
@@ -242,20 +535,34 @@ async def enforce_home_guild():
 
 # ---------------------------------------------------------------------
 
+# SLASH COMMAND SYNC
+# Also called after a plugin is enabled or reloaded, so its commands appear or
+# disappear without waiting for a restart.
+async def sync_commands() -> int:
+    if not bot.guilds:
+        logging.warning("Bot is not in any guild, slash commands not synced.")
+        return 0
+
+    guild = bot.guilds[0]
+    # copy_global_to() merges the global commands into whatever the guild copy
+    # already holds, so a command whose plugin has been unloaded would stay
+    # there and be re-uploaded on every sync. Clearing first makes the guild
+    # copy an exact mirror of what is currently loaded.
+    bot.tree.clear_commands(guild=guild)
+    bot.tree.copy_global_to(guild=guild)
+    synced = await bot.tree.sync(guild=guild)
+    logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
+    return len(synced)
+
+# ---------------------------------------------------------------------
+
 # EVENTS
 @bot.event
 async def on_ready():
     logging.info(f"Logged in as {bot.user}")
 
     await enforce_home_guild()
-
-    if bot.guilds:
-        guild = bot.guilds[0]
-        bot.tree.copy_global_to(guild=guild)
-        synced = await bot.tree.sync(guild=guild)
-        logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
-    else:
-        logging.warning("Bot is not in any guild, slash commands not synced.")
+    await sync_commands()
 
 # ---------------------------------------------------------------------
 
@@ -280,30 +587,30 @@ async def on_guild_join(guild: discord.Guild):
 
 # ---------------------------------------------------------------------
 
-# COMMANDS
-@bot.command()
-async def ping(ctx):
-    user_mention = ctx.author.mention
-    await ctx.send(f"{user_mention}")
-
-# ---------------------------------------------------------------------
-
 # MAIN START FUNCTION
 async def main():
     try:
+        logging.info(f"Doppler {__version__} starting up.")
         logging.info("Initializing SQLite database...")
         await init_db()
         logging.info("Database initialized successfully.")
 
         await start_internal_api()
+        await drop_migrated_provider_keys()
 
-        if not TOKEN:
-            logging.error("DISCORD_BOT_TOKEN parameter missing in .env file.")
+        token = await resolve_token()
+        if not token:
+            # Exiting restarts the container, which re-reads the database — so
+            # finishing setup in the dashboard brings the bot up on its own.
+            logging.error(
+                "No bot token configured yet. Finish the first-run setup in the dashboard; "
+                "this container will pick it up on its next restart."
+            )
             return
 
         async with bot:
-            await load_cogs(bot)
-            await bot.start(TOKEN)
+            await bot.plugins.load_all()
+            await bot.start(token)
 
     finally:
         await close_db()

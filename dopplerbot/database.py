@@ -1,6 +1,8 @@
 import asyncio
 import aiosqlite
 import logging
+import os
+import re
 from pathlib import Path
 
 SAVEDATA_DIR = Path(__file__).resolve().parent.parent / "savedata"
@@ -32,105 +34,253 @@ async def close_db():
 
 # FORCE TABLE CREATION
 async def ensure_tables(db):
+    # Settings are keyed by (category, key), where category doubles as the
+    # plugin's namespace — a plugin declaring a common key like "channel_id"
+    # must not collide with another plugin doing the same.
     await db.execute("""
         CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
+            category TEXT NOT NULL DEFAULT 'Main',
+            key TEXT NOT NULL,
             value TEXT NOT NULL,
-            category TEXT NOT NULL DEFAULT 'Main'
+            PRIMARY KEY (category, key)
         )
     """)
+
+    # Migrate the pre-plugin schema (key alone as PRIMARY KEY). Unlike the
+    # ephemeral temp_channels table this holds real configuration, so the rows
+    # are copied across rather than recreated.
+    pk_columns = [row[1] async for row in await db.execute("PRAGMA table_info(settings)") if row[5]]
+    if pk_columns == ["key"]:
+        await db.execute("""
+            CREATE TABLE settings_migrated (
+                category TEXT NOT NULL DEFAULT 'Main',
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (category, key)
+            )
+        """)
+        await db.execute(
+            "INSERT INTO settings_migrated (category, key, value) SELECT category, key, value FROM settings"
+        )
+        await db.execute("DROP TABLE settings")
+        await db.execute("ALTER TABLE settings_migrated RENAME TO settings")
+        logging.info("Migrated the settings table to a (category, key) primary key.")
 
     # TABLE / TEMPORARY VOICE CHANNELS
     # channel_id is the primary key (one row per channel): owner_id is the
     # current owner (changes on transfer) and original_owner_id never changes,
     # so ownership can be handed back if the creator rejoins later.
-    existing_columns = {row[1] async for row in await db.execute("PRAGMA table_info(temp_channels)")}
-    if existing_columns and "original_owner_id" not in existing_columns:
-        # Pre-migration schema (owner_id as PK, no original owner tracking).
-        # Temp channels are ephemeral session state — the real Discord channels
-        # are untouched, they just go "unmanaged" until recreated.
-        await db.execute("DROP TABLE temp_channels")
-
-    await db.execute("""
-        CREATE TABLE IF NOT EXISTS temp_channels (
-            channel_id INTEGER PRIMARY KEY,
-            owner_id INTEGER NOT NULL,
-            original_owner_id INTEGER NOT NULL
-        )
-    """)
-
-    # TABLE / MUSIC BOTs SETTINGS
-    # The bot_token and bot_user_id entries are initially created as empty fields and are filled in later via the web dashboard.
-    await db.execute("""
-        CREATE TABLE IF NOT EXISTS music_bots (
-            bot_rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-            bot_token TEXT,
-            bot_user_id INTEGER,
-            bot_status INTEGER NOT NULL DEFAULT 1
-        )
-    """)
     await db.commit()
+
+
+# LEGACY SETTINGS MIGRATION
+# As each built-in module moves to the plugin API its settings move with it,
+# from the core's own category into the plugin's namespace (the plugin id).
+# Each entry is (old_category, old_key, new_category, new_key); a row is only
+# moved if the plugin hasn't already got a value there, so this is safe to run
+# on every startup and does nothing once the move has happened.
+LEGACY_SETTINGS_MOVES = [
+    # AI credentials, which briefly lived in the ai plugin's namespace. They are
+    # the bot's now: a plugin asks for a completion instead of holding a key.
+    ("ai", "provider", "AI", "provider"),
+    ("ai", "gemini_api_key", "AI", "gemini_api_key"),
+    ("ai", "deepseek_api_key", "AI", "deepseek_api_key"),
+    ("ai", "chatgpt_api_key", "AI", "chatgpt_api_key"),
+
+    # Translator
+    ("Translator", "translator_provider", "translator", "provider"),
+    ("Translator", "translator_deepl_api_key", "translator", "deepl_api_key"),
+    ("Translator", "translator_google_api_key", "translator", "google_api_key"),
+    ("Modules", "translator", "Plugins", "translator"),
+
+    # AI chat
+    ("AI", "ai_provider", "ai", "provider"),
+    ("AI", "ai_gemini_api_key", "ai", "gemini_api_key"),
+    ("AI", "ai_deepseek_api_key", "ai", "deepseek_api_key"),
+    ("AI", "ai_chatgpt_api_key", "ai", "chatgpt_api_key"),
+    ("AI", "ai_bot_name", "ai", "bot_name"),
+    ("AI", "ai_system_prompt", "ai", "system_prompt"),
+    ("AI", "ai_force_language", "ai", "force_language"),
+    ("AI", "ai_language", "ai", "language"),
+    ("AI", "ai_irony", "ai", "irony"),
+    ("AI", "ai_seriousness", "ai", "seriousness"),
+    ("AI", "ai_enabled", "Plugins", "ai"),
+    # Never read by any code path -- carried over so it stops lingering in the table.
+    ("Modules", "ai_features", "Plugins", "ai"),
+
+    # Moderation
+    ("Moderation", "mod_log_enabled", "moderation", "log_enabled"),
+    ("Moderation", "mod_log_channel_id", "moderation", "log_channel_id"),
+    ("Modules", "moderation", "Plugins", "moderation"),
+
+    # Server Protect (keys keep their names; only the namespace changes)
+    ("ServerProtect", "min_account_age_days", "serverprotect", "min_account_age_days"),
+    ("ServerProtect", "verified_role_id", "serverprotect", "verified_role_id"),
+    ("ServerProtect", "raid_mode", "serverprotect", "raid_mode"),
+    ("ServerProtect", "raid_join_threshold", "serverprotect", "raid_join_threshold"),
+    ("ServerProtect", "raid_join_window_seconds", "serverprotect", "raid_join_window_seconds"),
+    ("ServerProtect", "raid_alert_channel_id", "serverprotect", "raid_alert_channel_id"),
+    ("ServerProtect", "raid_lockdown_duration_minutes", "serverprotect", "raid_lockdown_duration_minutes"),
+    ("ServerProtect", "raid_lockdown_active", "serverprotect", "raid_lockdown_active"),
+    ("ServerProtect", "raid_lockdown_started_at", "serverprotect", "raid_lockdown_started_at"),
+    ("Modules", "server_protect", "Plugins", "serverprotect"),
+
+    # Music
+    ("Modules", "music_bots", "Plugins", "music"),
+
+    # Temporary voice channels
+    ("Voice", "main_voice_channel_id", "voice", "main_voice_channel_id"),
+    ("Voice", "category_id", "voice", "category_id"),
+    ("Voice", "voice_channel_name_prefix", "voice", "channel_name_prefix"),
+    ("Voice", "voice_enabled", "Plugins", "voice"),
+    # The module toggle carried a typo ("manger") and was never read by the
+    # loader, which used Voice/voice_enabled instead.
+    ("Modules", "voice_manger", "Plugins", "voice"),
+]
+
+
+# As with settings, a module moving to the plugin API takes its tables with it,
+# from the core database into savedata/plugins/<id>/data.db. Each entry is
+# (table, plugin_id). The table is copied with its schema intact and then
+# dropped here, so this runs once and finds nothing on later startups.
+LEGACY_TABLE_MOVES = [
+    ("music_bots", "music"),
+    ("temp_channels", "voice"),
+]
+
+
+# Secrets a migrated module used to read straight out of the environment. They
+# are copied into the plugin's namespace once, so the plugin never touches
+# os.getenv and the value becomes editable from the dashboard like any other
+# setting. Each entry is (env var, plugin_id, key); an unset variable or an
+# existing value is left alone.
+LEGACY_ENV_SEEDS = [
+    ("LAVALINK_PASSWORD", "music", "lavalink_password"),
+    ("LAVALINK_URI", "music", "lavalink_uri"),
+    ("YOUTUBE_OAUTH_REFRESH_TOKEN", "music", "youtube_oauth_refresh_token"),
+]
+
+
+async def seed_settings_from_env(db):
+    for env_var, plugin_id, key in LEGACY_ENV_SEEDS:
+        value = os.getenv(env_var)
+        if not value:
+            continue
+        # Fill in a value that is missing *or* still blank: a placeholder row
+        # created by a default should not shadow a real key sitting in .env.
+        await db.execute(
+            """
+            INSERT INTO settings (category, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(category, key) DO UPDATE SET
+                value = excluded.value
+            WHERE settings.value = ''
+            """,
+            (plugin_id, key, value),
+        )
+    await db.commit()
+
+
+async def migrate_legacy_tables(db):
+    for table, plugin_id in LEGACY_TABLE_MOVES:
+        async with db.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None or not row[0]:
+            continue
+
+        # Recreate the table verbatim in the plugin's database so the primary
+        # key and AUTOINCREMENT survive -- "CREATE TABLE ... AS SELECT" loses them.
+        create_sql, count = re.subn(
+            rf"^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[\"'`\[]?{table}[\"'`\]]?",
+            f'CREATE TABLE IF NOT EXISTS plugin_db."{table}"',
+            row[0],
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        if count != 1:
+            logging.error(f"Could not rewrite the schema for {table!r}; leaving it in place.")
+            continue
+
+        target_dir = SAVEDATA_DIR / "plugins" / plugin_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        await db.execute("ATTACH DATABASE ? AS plugin_db", (str(target_dir / "data.db"),))
+        try:
+            await db.execute(create_sql)
+
+            # If the plugin already holds rows, two versions of this data exist
+            # and picking one silently could throw away the operator's. Leave
+            # both in place and say so instead.
+            async with db.execute(f'SELECT COUNT(*) FROM plugin_db."{table}"') as cursor:
+                existing = (await cursor.fetchone())[0]
+            if existing:
+                await db.commit()
+                logging.warning(
+                    f"Not moving {table!r}: the {plugin_id!r} plugin's database already has "
+                    f"{existing} row(s). The copy in bot.db was left untouched -- delete "
+                    f"whichever is stale."
+                )
+                continue
+
+            await db.execute(f'INSERT INTO plugin_db."{table}" SELECT * FROM main."{table}"')
+            await db.execute(f'DROP TABLE main."{table}"')
+            await db.commit()
+            logging.info(f"Moved the {table!r} table into the {plugin_id!r} plugin's database.")
+        except Exception:
+            # A failed migration must not stop the bot from booting: roll back so
+            # the source table survives untouched and the move can be retried.
+            await db.rollback()
+            logging.exception(f"Failed to move the {table!r} table; leaving it in bot.db.")
+        finally:
+            # DETACH refuses to run inside a transaction, so this has to come
+            # after the commit or rollback above.
+            try:
+                await db.execute("DETACH DATABASE plugin_db")
+            except Exception:
+                logging.exception("Failed to detach the plugin database.")
+
+
+async def migrate_legacy_settings(db):
+    moved = 0
+    for old_cat, old_key, new_cat, new_key in LEGACY_SETTINGS_MOVES:
+        async with db.execute(
+            "SELECT value FROM settings WHERE category = ? AND key = ?", (old_cat, old_key)
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            continue
+
+        await db.execute(
+            """
+            INSERT INTO settings (category, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(category, key) DO NOTHING
+            """,
+            (new_cat, new_key, row[0]),
+        )
+        await db.execute("DELETE FROM settings WHERE category = ? AND key = ?", (old_cat, old_key))
+        moved += 1
+
+    if moved:
+        await db.commit()
+        logging.info(f"Moved {moved} legacy setting(s) into their plugin namespaces.")
 
 
 # INIT DB
 async def init_db():
     async with _db_lock:
         db = await _connect()
+        await migrate_legacy_settings(db)
+        await migrate_legacy_tables(db)
+        await seed_settings_from_env(db)
 
         default_settings = [
             # MAIN
-            ("prefix", "+", "Main"),
-
-            # AI
-            ("ai_bot_name", "Kara AI", "AI"),
-            ("ai_system_prompt", "You're a moderator on Discord. Be polite and helpful.", "AI"),
-            ("ai_language", "English", "AI"),
-            ("ai_irony", "0.2", "AI"),
-            ("ai_seriousness", "0.8", "AI"),
-            ("ai_force_language", "true", "AI"),
-            ("ai_provider", "gemini", "AI"),
-            ("ai_gemini_api_key", "", "AI"),
-            ("ai_deepseek_api_key", "", "AI"),
-            ("ai_chatgpt_api_key", "", "AI"),
-
-            # VOICEMANAGER
-            ("category_id", "0", "Voice"),
-            ("main_voice_channel_id", "0", "Voice"),
-            ("voice_channel_name_prefix", "🏠║", "Voice"),
-
-            # MODERATION
-            ("mod_log_channel_id", "0", "Moderation"),
-            ("mod_log_enabled", "false", "Moderation"),
-
-            # TRANSLATOR
-            ("translator_provider", "google", "Translator"),
-            ("translator_deepl_api_key", "", "Translator"),
-            ("translator_google_api_key", "", "Translator"),
-
-            # SERVER PROTECT
-            ("min_account_age_days", "7", "ServerProtect"),
-            ("verified_role_id", "0", "ServerProtect"),
-            # Raid protection: "alert" posts a warning + admin-only button; "auto" locks down by itself.
-            ("raid_mode", "alert", "ServerProtect"),
-            ("raid_join_threshold", "5", "ServerProtect"),
-            ("raid_join_window_seconds", "10", "ServerProtect"),
-            ("raid_alert_channel_id", "0", "ServerProtect"),
-            ("raid_lockdown_duration_minutes", "15", "ServerProtect"),
-            # Runtime state, not a user-facing setting: whether lockdown is currently active.
-            ("raid_lockdown_active", "false", "ServerProtect"),
-            ("raid_lockdown_started_at", "", "ServerProtect"),
 
             # MODULES
-            ("ai_features", "true", "Modules"),
-            ("voice_manger", "true", "Modules"),
-            ("music_bots", "true", "Modules"),
-            ("moderation", "true", "Modules"),
-            ("translator", "true", "Modules"),
-            # Off by default: needs DISCORD_CLIENT_ID/SECRET + DASHBOARD_URL configured first.
-            ("server_protect", "false", "Modules"),
 
-            # MUSIC BOTS
-            ("music_bot_id", "", "Music")
         ]
 
         # Calling ON CONFLICT DO NOTHING during startup applies only the initial default settings without overwriting changes already made by the user.
@@ -138,9 +288,9 @@ async def init_db():
             try:
                 await db.execute(
                     """
-                    INSERT INTO settings (key, value, category) 
-                    VALUES (?, ?, ?) 
-                    ON CONFLICT(key) DO NOTHING
+                    INSERT INTO settings (key, value, category)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(category, key) DO NOTHING
                     """,
                     (key, val, cat),
                 )
@@ -152,12 +302,28 @@ async def init_db():
 
 # ---> SETTINGS
 # GETTING SETTINGS
-async def get_settings(key: str, default: str | None = None) -> str | None:
+# category is optional for backwards compatibility: without it the first match
+# for the key is returned regardless of namespace, which is only safe for the
+# handful of globally-unique core keys (prefix, home_guild_id, module toggles).
+async def get_settings(key: str, default: str | None = None, category: str | None = None) -> str | None:
+    if category is None:
+        query, params = "SELECT value FROM settings WHERE key = ? LIMIT 1", (key,)
+    else:
+        query, params = "SELECT value FROM settings WHERE category = ? AND key = ?", (category, key)
+
     async with _db_lock:
         db = await _connect()
-        async with db.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cursor:
+        async with db.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else default
+
+
+# REMOVING A SETTING
+async def delete_setting(category: str, key: str):
+    async with _db_lock:
+        db = await _connect()
+        await db.execute("DELETE FROM settings WHERE category = ? AND key = ?", (category, key))
+        await db.commit()
 
 
 # GETTING CATEGORY SETTINGS
@@ -178,181 +344,11 @@ async def set_settings(key: str, value: str, category: str = "Main"):
         db = await _connect()
         await db.execute(
             """
-            INSERT INTO settings (key, value, category) 
-            VALUES (?, ?, ?) 
-            ON CONFLICT(key) DO UPDATE SET 
-                value = excluded.value, 
-                category = excluded.category
+            INSERT INTO settings (category, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(category, key) DO UPDATE SET
+                value = excluded.value
             """,
-            (key, value, category),
+            (category, key, value),
         )
         await db.commit()
-
-
-# ---> VOICE MANAGER
-# ADD TEMP CHANNEL
-# Only used for a brand-new channel, so the current and original owner are
-# the same person at this point.
-async def add_temp_channel(channel_id: int, owner_id: int):
-    async with _db_lock:
-        db = await _connect()
-        await db.execute(
-            "INSERT OR REPLACE INTO temp_channels (channel_id, owner_id, original_owner_id) VALUES (?, ?, ?)",
-            (channel_id, owner_id, owner_id),
-        )
-        await db.commit()
-
-
-# TRANSFER (OR RESTORE) OWNERSHIP OF AN EXISTING CHANNEL
-# Deliberately leaves original_owner_id untouched, so it can still be used later
-# to hand ownership back if the original creator rejoins.
-async def set_temp_channel_owner(channel_id: int, new_owner_id: int):
-    async with _db_lock:
-        db = await _connect()
-        await db.execute(
-            "UPDATE temp_channels SET owner_id = ? WHERE channel_id = ?",
-            (new_owner_id, channel_id),
-        )
-        await db.commit()
-
-
-# REMOVE TEMP CHANNEL
-async def remove_temp_channel(channel_id: int):
-    async with _db_lock:
-        db = await _connect()
-        await db.execute(
-            "DELETE FROM temp_channels WHERE channel_id = ?",
-            (channel_id,),
-        )
-        await db.commit()
-
-
-# GET ALL TEMP CHANNELS
-async def get_all_temp_channels() -> list[tuple[int, int, int]]:
-    async with _db_lock:
-        db = await _connect()
-        async with db.execute(
-            "SELECT channel_id, owner_id, original_owner_id FROM temp_channels"
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [tuple(row) for row in rows]
-
-# ----------------------MUSIC BOTS-------------------------------------
-
-# ADD MUSIC BOT
-# Creates an empty, inactive bot record for the item just added to the panel, returning its ID for future updates and configuration.
-async def add_music_bot():
-    async with _db_lock:
-        db = await _connect()
-        cursor = await db.execute("INSERT INTO music_bots (bot_token, bot_status) VALUES (?, ?)", ("", 0))
-        await db.commit()
-        return cursor.lastrowid
-
-# ---------------------------------------------------------------------
-
-# UPDATE MUSIC BOT
-# The dynamic SET part of the request updates only the fields that were actually sent,
-# ignoring values of `None` so as not to overwrite other data
-# (for example, the token when toggling the `status` switch).
-async def update_music_bot(
-    bot_rowid: int,
-    bot_token: str | None = None,
-    bot_user_id: int | None = None,
-    bot_status: int | None = None,
-):
-    if not bot_rowid:
-        logging.warning("Failed to update: bot_rowid is missing or invalid.")
-        return
-
-    fields: list[str] = []
-    params: list[str | int] = []
-
-    if bot_token is not None:
-        fields.append("bot_token = ?")
-        params.append(bot_token)
-
-    if bot_user_id is not None:
-        fields.append("bot_user_id = ?")
-        params.append(bot_user_id)
-
-    if bot_status is not None:
-        fields.append("bot_status = ?")
-        params.append(bot_status)
-
-    if not fields:
-        logging.info("No parameters provided for update. Skipping execution.")
-        return
-
-    # The bot_rowid is added to the end of params for the WHERE clause, since placeholders are substituted sequentially from left to right.
-    params.append(bot_rowid)
-    query = f"UPDATE music_bots SET {', '.join(fields)} WHERE bot_rowid = ?"
-
-    try:
-        async with _db_lock:
-            db = await _connect()
-            await db.execute(query, tuple(params))
-            await db.commit()
-
-    except Exception as e:
-        logging.error(f"Error while update settings: {e}")
-
-# ---------------------------------------------------------------------
-
-# The function returns a record by ID, replacing None in the token with an empty string to make it easier to check for the presence of data.
-async def get_music_bot(bot_rowid: int) -> tuple[int, str, int | None, int] | None:
-    try:
-        async with _db_lock:
-            db = await _connect()
-            async with db.execute(
-                "SELECT bot_rowid, bot_token, bot_user_id, bot_status "
-                "FROM music_bots WHERE bot_rowid = ?",
-                (bot_rowid,),
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row is None:
-                    return None
-
-                r_id, token, user_id, status = row
-                
-                safe_user_id = int(user_id) if user_id is not None else None
-                safe_token = str(token) if token is not None else ""
-                
-                return (int(r_id), safe_token, safe_user_id, int(status))
-
-    except Exception as e:
-        logging.error(f"Error while getting bot info: {e}")
-        return None
-
-# ---------------------------------------------------------------------
-
-# The function returns all records without filtering, leaving it up to the caller to determine which bots are inactive or empty.
-async def get_all_music_bots() -> list[tuple]:
-    query = """
-        SELECT bot_rowid, bot_token, bot_user_id, bot_status
-        FROM music_bots
-    """
-    results: list[tuple] = []
-    try:
-        async with _db_lock:
-            db = await _connect()
-            async with db.execute(query) as cursor:
-                rows = await cursor.fetchall()
-                results = [tuple(row) for row in rows]
-
-    except Exception as e:
-        logging.error(f"Error while fetching music bot: {e}")
-  
-    return results
-
-# ---------------------------------------------------------------------
-
-# Deletes the bot's data from the db.
-async def remove_music_bot(bot_rowid: int):
-    try:
-        async with _db_lock:
-            db = await _connect()
-            query = "DELETE FROM music_bots WHERE bot_rowid = ?"
-            await db.execute(query, (bot_rowid,))
-            await db.commit()
-    except Exception as e:
-        logging.error(f"Error while removing music bot {e}")

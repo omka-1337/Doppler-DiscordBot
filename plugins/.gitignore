@@ -1,0 +1,4 @@
+# Plugins installed at runtime from the dashboard's plugin browser.
+# The directory itself is tracked so the bind mount always has somewhere to land.
+*
+!.gitignore

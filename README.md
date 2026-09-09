@@ -13,15 +13,15 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 - 🛡️ **Moderation** *(plugin)* — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
 - 🛠️ **Rich Embed Builder** *(plugin)* — build Discord messages visually in the dashboard using Components V2 (independent cards, each with its own accent color and ordered text/image blocks), then send them with `/embed <name>`. Images can be linked by URL or uploaded directly.
 - 🔒 **Server Protect** *(plugin)* — optional raid/alt mitigation. Checks every new member's account age on join (DMs the reason and kicks if too new; grants a role automatically otherwise), and detects join bursts — react with an admin-gated alert or fully automatic lockdown (revokes invites, rejects new joins for a while).
-- 🧠 **Plugins** — features can ship as self-contained plugins that are enabled, configured and reloaded from the dashboard. Reloading a plugin applies its new code *without restarting the bot*.
-- 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), per-module enable/disable toggles, and settings management for every feature above.
-- 🔐 **Dashboard Login** (optional) — gate the dashboard behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It switches itself on once a home server is set and a Client Secret is saved in Settings — the Client ID is detected automatically, and the login page shows you the exact redirect URI to register (with a copy button and a direct link to your app's OAuth2 page).
+- 🧠 **Plugins** — every feature above is one. Install from a source, then enable, configure and reload from the dashboard; reloading applies a plugin's new code *without restarting the bot*.
+- 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), a plugin browser for installing from a source, and generated settings forms for everything installed.
+- 🔐 **Dashboard Login** — the dashboard is behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It is set up during first run rather than being optional, so a fresh install is never briefly open. The Client ID is detected automatically, and both the setup and login pages show the exact redirect URI to register.
 
 **Doppler ships empty.** Every feature above is a plugin, installed from the dashboard's **Plugins → Browse** tab and then enabled, configured and reloaded from **Plugins → Installed**. The official plugins live on this repository's [`doppler/plugins`](../../tree/doppler/plugins) branch, which is configured as a trusted source out of the box.
 
 ## Plugins
 
-A plugin is a self-contained folder holding a `plugin.json` manifest and its Python code. Built-in plugins ship in `dopplerbot/plugins/builtin/`; anything installed at runtime lands in `plugins/` at the repo root, which is bind-mounted and ignored by git, so installed plugins survive an image rebuild.
+A plugin is a self-contained folder holding a `plugin.json` manifest and its Python code. Installed plugins land in `plugins/` at the repo root, which the broker writes, the bot only reads, and git ignores — so they survive an image rebuild and never end up in your commits.
 
 ```
 plugins/my_plugin/          # installed plugins; the broker writes this
@@ -57,10 +57,11 @@ Cogs and persistent views registered through `self.ctx` are removed automaticall
 
 ### Provider credentials
 
-AI and translation keys are configured once, under **Settings → Providers**,
-and shared by every plugin that needs them — so a key is never pasted into more
-than one place, and switching model or translation service is one change rather
-than one per plugin.
+The AI provider and its key are configured once, under **Settings → AI
+Provider**, and shared by every plugin that uses a model — so a key is never
+pasted into more than one place, and switching model is one change rather than
+one per plugin. Translation needs no key of its own: it is keyless by default,
+and a plugin that offers the choice can point it at the same AI provider.
 
 They are held by the **broker**, in a `secrets/` volume that is not mounted into
 the bot container at all, and the broker never hands a value back. A plugin asks
@@ -88,7 +89,7 @@ larger redesign:
 So installing a plugin still means trusting it. What this buys is that the
 provider keys are no longer part of what you hand over.
 
-### Sources and trust### Sources and trust
+### Sources and trust
 
 Plugins are installed from *sources* — a GitHub repository and branch holding
 one directory per plugin plus an `index.json` catalogue. There is exactly one
@@ -163,11 +164,11 @@ needs a container" no longer means "this plugin gets root on the host".
 ## Requirements
 
 - Docker and Docker Compose
-- A Discord bot application ([Discord Developer Portal](https://discord.com/developers/applications)) with the **Message Content** privileged intent enabled (required for AI chat and translation)
-- Optional, depending on which modules you use:
-  - An API key for whichever AI provider you pick for AI chat: [Gemini](https://aistudio.google.com/apikey), [DeepSeek](https://platform.deepseek.com/api_keys), or [OpenAI](https://platform.openai.com/api-keys)
+- A Discord bot application ([Discord Developer Portal](https://discord.com/developers/applications)) with the **Message Content** privileged intent enabled (AI chat reads messages from the gateway)
+- The OAuth2 **Client Secret** from the same application, and each address you open the dashboard from registered under **OAuth2 → Redirects**. Both are needed to finish first-run setup.
+- Optional, depending on which plugins you install:
+  - An API key for whichever AI provider you pick: [Gemini](https://aistudio.google.com/apikey), [DeepSeek](https://platform.deepseek.com/api_keys), or [OpenAI](https://platform.openai.com/api-keys). AI chat needs one; translation can use it instead of the keyless backend.
   - For **Server Protect**: the **Server Members Intent** privileged intent (needed to detect joins at all)
-  - For **Dashboard Login**: the OAuth2 Client Secret from the same Developer Portal application, plus each address you open the dashboard from registered under **OAuth2 → Redirects** (the login page shows the exact value to paste)
 
 ## Quick start (Docker)
 
@@ -177,7 +178,7 @@ cd Doppler-DiscordBot
 make start
 ```
 
-`make start` creates `.env` from `.env.example` (with a random `LAVALINK_PASSWORD`) if one doesn't exist yet, then builds and starts all three containers (bot, web dashboard, Lavalink).
+`make start` creates `.env` from `.env.example` (with a random `LAVALINK_PASSWORD`) if one doesn't exist yet, then builds and starts the three containers: the bot, the web dashboard, and the broker. Lavalink is not among them — the broker starts it when the music plugin asks for it.
 
 Once it's running:
 
@@ -208,10 +209,11 @@ docker compose up -d --build
 
 | `.env` variable | Required | Notes |
 |---|---|---|
-| `DISCORD_BOT_TOKEN` | Yes | Can also be set later from the web dashboard |
-| `LAVALINK_PASSWORD` | Yes | Must match `lavalink/application.yml`; auto-generated by `make start` |
+| `DISCORD_BOT_TOKEN` | Yes | Normally entered during first-run setup rather than by hand |
+| `GEMINI_API_KEY` | No | Seeded into the broker's credential store on first run; after that the dashboard owns it |
+| `LAVALINK_PASSWORD` | For music | Auto-generated by `make start`, then seeded into the music plugin's settings, which is what the Lavalink container is started with |
 | `YOUTUBE_OAUTH_REFRESH_TOKEN` | No | Optional, for YouTube playback; fill in via the dashboard's Music settings |
-| `DISCORD_CLIENT_SECRET` | Only for dashboard login | From the Developer Portal application's OAuth2 page. Can also be set from the dashboard |
+| `DISCORD_CLIENT_SECRET` | Yes | From the Developer Portal application's OAuth2 page. Normally entered during first-run setup rather than by hand |
 | `SESSION_SECRET_KEY` | No | Generated and saved automatically on first run; don't set it yourself |
 
 Everything else — which plugins are installed and enabled, their settings, the AI provider and its key, music worker bot tokens — lives in the SQLite database (`savedata/bot.db`) and the broker's store, and is edited entirely through the web dashboard. Uploaded embed images are stored in `savedata/embeds/images/`.

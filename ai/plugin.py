@@ -3,9 +3,7 @@ import traceback
 import discord
 from discord.ext import commands
 
-from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
-
-from .providers import PROVIDERS, gemini
+from dopplerbot.plugins.api import AIError, Plugin, PluginSetting, SettingType
 
 
 class AIChatCog(commands.Cog):
@@ -25,15 +23,13 @@ class AIChatCog(commands.Cog):
         if not clean_content:
             clean_content = "Hi! Did you need something?"
 
-        settings = await self.plugin.settings.all()
-
-        provider_name = settings["provider"]
-        provider = PROVIDERS.get(provider_name, gemini)
-        api_key = settings.get(f"{provider_name}_api_key", "")
-
-        if not api_key:
-            await message.reply(f"The API key for {provider_name} has not been configured.")
+        # The provider and its key belong to the bot, not to this plugin, so all
+        # it can do is ask whether anything is configured.
+        if not await self.plugin.ctx.ai.is_configured():
+            await message.reply("No AI provider is configured for this bot yet.")
             return
+
+        settings = await self.plugin.settings.all()
 
         async with message.channel.typing():
             try:
@@ -85,31 +81,26 @@ class AIChatCog(commands.Cog):
                     f"{language_instruction}"
                 )
 
-                reply_text = await provider.generate_reply(system_prompt, prompt_to_send, api_key)
+                reply_text = await self.plugin.ctx.ai.complete(system_prompt, prompt_to_send)
 
                 if reply_text:
                     await message.reply(reply_text)
                 else:
                     await message.reply("The AI returned an empty response...")
 
+            except AIError as e:
+                self.plugin.log.error("AI request failed: %s", e)
+                await message.reply("The AI service could not be reached right now.")
             except Exception:
                 traceback.print_exc()
-                await message.reply("API error")
+                await message.reply("Something went wrong while answering.")
 
 
 class AIChatPlugin(Plugin):
+    # Persona only. Which service answers and what it costs is the bot's
+    # business: this plugin hands over a prompt through ctx.ai and gets text
+    # back, so it never holds an API key.
     SETTINGS = (
-        PluginSetting(
-            "provider",
-            SettingType.SELECT,
-            default="gemini",
-            label="AI provider",
-            description="Which service answers. Each one needs its own API key below.",
-            choices=(("gemini", "Google Gemini"), ("deepseek", "DeepSeek"), ("chatgpt", "ChatGPT")),
-        ),
-        PluginSetting("gemini_api_key", SettingType.SECRET, default="", label="Gemini API key"),
-        PluginSetting("deepseek_api_key", SettingType.SECRET, default="", label="DeepSeek API key"),
-        PluginSetting("chatgpt_api_key", SettingType.SECRET, default="", label="ChatGPT API key"),
         PluginSetting(
             "bot_name",
             SettingType.STRING,
@@ -138,24 +129,8 @@ class AIChatPlugin(Plugin):
             label="Target language",
             description="Only used when Force language is on.",
         ),
-        PluginSetting(
-            "irony",
-            SettingType.SLIDER,
-            default=0.2,
-            label="Level of irony",
-            min=0.0,
-            max=1.0,
-            step=0.05,
-        ),
-        PluginSetting(
-            "seriousness",
-            SettingType.SLIDER,
-            default=0.8,
-            label="Severity level",
-            min=0.0,
-            max=1.0,
-            step=0.05,
-        ),
+        PluginSetting("irony", SettingType.SLIDER, default=0.2, label="Level of irony", min=0.0, max=1.0, step=0.05),
+        PluginSetting("seriousness", SettingType.SLIDER, default=0.8, label="Severity level", min=0.0, max=1.0, step=0.05),
     )
 
     async def setup(self):

@@ -1,12 +1,12 @@
 {
   "id": "ai",
   "name": "AI Chat",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "api_version": "1.0",
-  "description": "Conversational AI: mention the bot and it replies, using Google Gemini, DeepSeek or ChatGPT.",
+  "description": "Conversational AI: mention the bot and it replies. The provider and API key are the bot's own settings.",
   "author": "Doppler",
   "icon": "🤖",
   "entrypoint": "plugin.py",
-  "requirements": ["google-genai", "httpx"],
+  "requirements": [],
   "default_enabled": true
 }

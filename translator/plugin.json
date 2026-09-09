@@ -1,9 +1,9 @@
 {
   "id": "translator",
   "name": "Message Translation",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "api_version": "1.0",
-  "description": "Right-click any message -> Apps -> Translate. The translation service and its API key are the bot's own settings.",
+  "description": "Right-click any message -> Apps -> Translate. Free by default, or switch it to the bot's AI provider.",
   "author": "Doppler",
   "icon": "🌐",
   "entrypoint": "plugin.py",

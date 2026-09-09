@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from dopplerbot.plugins.api import Plugin, TranslationError
+from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType, TranslationError
 
 from .locale_mapping import display_name, display_name_from_provider_code, get_base_lang
 
@@ -44,9 +44,12 @@ class TranslatorCog(commands.Cog):
         target_base_lang = get_base_lang(interaction.locale)
 
         try:
-            # The provider and its key belong to the bot: this asks for a
-            # translation and never sees a credential.
-            result = await self.plugin.ctx.translate.text(text[:MAX_TEXT_LENGTH], target_base_lang)
+            # The backend is this plugin's setting; the credential behind it,
+            # if any, belongs to the bot and never reaches here.
+            mode = await self.plugin.settings.get("mode")
+            result = await self.plugin.ctx.translate.text(
+                text[:MAX_TEXT_LENGTH], target_base_lang, mode
+            )
         except TranslationError as e:
             self.plugin.log.error("Translation failed: %s", e)
             await interaction.followup.send(
@@ -66,9 +69,23 @@ class TranslatorCog(commands.Cog):
 
 
 class TranslatorPlugin(Plugin):
-    # No settings: which translation service is used, and its key, are the
-    # bot's configuration under Settings -> Providers.
-    SETTINGS = ()
+    SETTINGS = (
+        PluginSetting(
+            "mode",
+            SettingType.SELECT,
+            default="google_free",
+            label="Translation backend",
+            description=(
+                "Free needs no setup but is rate limited under load. AI reuses the API key "
+                "already configured for the bot under Settings -> Providers, and handles "
+                "idiom and context better."
+            ),
+            choices=(
+                ("google_free", "Google Translate — free, no key required"),
+                ("ai", "AI translation — uses the bot's AI provider"),
+            ),
+        ),
+    )
 
     async def setup(self):
         await self.ctx.add_cog(TranslatorCog(self))

@@ -9,4 +9,7 @@ latest.log
 .venv
 .vscode
 .env
-savedata/
+savedata
+
+# Written by the broker: which source each installed plugin came from.
+config/installed.json

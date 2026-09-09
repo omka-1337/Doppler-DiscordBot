@@ -382,6 +382,58 @@ async def save_plugin_settings(payload: PluginSettingsPayload):
         {"plugin": payload.plugin, "values": payload.values},
     ))
 
+class SourcePayload(BaseModel):
+    name: str
+    repo: str = ""
+    branch: str = "main"
+    label: str = ""
+
+
+class SourceTrustPayload(BaseModel):
+    name: str
+    trusted: bool
+
+
+class InstallPayload(BaseModel):
+    source: str
+    plugin: str
+
+
+@app.get("/api/plugins/sources")
+async def list_sources():
+    return JSONResponse(await _call_bot("GET", "/internal/sources"))
+
+
+@app.get("/api/plugins/catalog")
+async def plugin_catalog():
+    """Everything the configured sources offer, with install state and trust."""
+    return JSONResponse(await _call_bot("GET", "/internal/catalog"))
+
+
+@app.post("/api/plugins/sources/add")
+async def add_source(payload: SourcePayload):
+    return JSONResponse(await _call_bot("POST", "/internal/sources/add", payload.model_dump()))
+
+
+@app.post("/api/plugins/sources/trust")
+async def trust_source(payload: SourceTrustPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/sources/trust", payload.model_dump()))
+
+
+@app.post("/api/plugins/sources/remove")
+async def remove_source(payload: SourceTrustPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/sources/remove", {"name": payload.name}))
+
+
+@app.post("/api/plugins/install")
+async def install_plugin(payload: InstallPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/install", payload.model_dump()))
+
+
+@app.post("/api/plugins/uninstall")
+async def uninstall_plugin(payload: PluginActionPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/uninstall", {"plugin": payload.plugin}))
+
 # ----------------------------MUSIC BOTS-------------------------------
 
 # MUSIC WORKER BOTS

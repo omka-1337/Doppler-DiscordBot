@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "name": "doppler-official",
+      "label": "Doppler official plugins",
+      "repo": "omka-1337/Doppler-DiscordBot",
+      "branch": "doppler/plugins",
+      "trusted": true
+    }
+  ]
+}

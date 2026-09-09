@@ -64,7 +64,13 @@
         "title": "🧠 Plugins",
         "description": "Enable, configure and reload plugins. Reloading applies a plugin's new code without restarting the bot.",
         "rescan": "🔄 Rescan folder",
-        "loading": "Loading plugins..."
+        "loading": "Loading plugins...",
+        "view_installed": "Installed",
+        "view_browse": "Browse",
+        "view_sources": "Sources",
+        "refresh": "🔄 Refresh catalogue",
+        "browse_hint": "Plugins offered by the configured sources. Installing runs someone else's code inside the bot — only install what you trust.",
+        "sources_hint": "Where plugins may be installed from. A new source starts untrusted; plugins from an untrusted source are refused sidecar containers."
     },
     "music": {
         "description": "Worker bot accounts and YouTube playback. Enable or disable the module itself on the Plugins tab."

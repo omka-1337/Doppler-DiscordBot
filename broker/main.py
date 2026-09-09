@@ -26,6 +26,7 @@ from pathlib import Path
 import docker
 from aiohttp import web
 
+from broker import sources
 from dopplerbot.plugins.manifest import PluginManifestError, load_manifest
 
 logging.basicConfig(
@@ -40,10 +41,26 @@ log = logging.getLogger("broker")
 PROJECT_DIR = Path("/project")
 HOST_PROJECT_DIR = os.getenv("HOST_PROJECT_DIR", "")
 
+# (path inside this container, path relative to the project on the host).
+# Installed plugins come through the writable /plugins mount rather than the
+# read-only project view, because the broker is the only thing allowed to
+# write there.
 PLUGIN_ROOTS = [
-    PROJECT_DIR / "dopplerbot" / "plugins" / "builtin",
-    PROJECT_DIR / "plugins",
+    (PROJECT_DIR / "dopplerbot" / "plugins" / "builtin", "dopplerbot/plugins/builtin"),
+    (sources.INSTALLED_ROOT, "plugins"),
 ]
+
+
+def host_path_for(plugin_dir: Path) -> str:
+    """Where a plugin directory lives as the Docker daemon sees it."""
+    if not HOST_PROJECT_DIR:
+        raise RuntimeError("HOST_PROJECT_DIR is not set, so host paths cannot be resolved.")
+
+    for container_root, host_relative in PLUGIN_ROOTS:
+        if plugin_dir.is_relative_to(container_root):
+            return f"{HOST_PROJECT_DIR}/{host_relative}/{plugin_dir.relative_to(container_root)}"
+
+    raise RuntimeError(f"{plugin_dir} is not inside a known plugin root.")
 
 LABEL_MANAGED = "doppler.managed"
 LABEL_PLUGIN = "doppler.plugin"
@@ -81,7 +98,7 @@ def discover_manifests() -> dict:
     """Re-read every manifest. Done per request so a freshly installed plugin
     is picked up without restarting the broker."""
     manifests = {}
-    for root in PLUGIN_ROOTS:
+    for root, _host_relative in PLUGIN_ROOTS:
         if not root.is_dir():
             continue
         for entry in sorted(root.iterdir()):
@@ -116,25 +133,21 @@ def build_mounts(manifest, spec) -> dict:
     if not spec.files:
         return {}
 
-    if not HOST_PROJECT_DIR:
-        raise RuntimeError(
-            "HOST_PROJECT_DIR is not set, so file mounts cannot be resolved to host paths."
-        )
-
     plugin_dir = manifest.path.resolve()
+    host_plugin_dir = host_path_for(plugin_dir)
     volumes = {}
 
-    for source, target in spec.files.items():
-        resolved = (plugin_dir / source).resolve()
+    for source_file, target in spec.files.items():
+        resolved = (plugin_dir / source_file).resolve()
         # The manifest parser already rejects absolute paths and "..", but a
         # symlink inside the plugin folder could still point outside it.
         if not resolved.is_relative_to(plugin_dir):
-            raise RuntimeError(f"{source!r} resolves outside the plugin directory.")
+            raise RuntimeError(f"{source_file!r} resolves outside the plugin directory.")
         if not resolved.is_file():
-            raise RuntimeError(f"{source!r} does not exist in the plugin directory.")
+            raise RuntimeError(f"{source_file!r} does not exist in the plugin directory.")
 
-        relative = resolved.relative_to(PROJECT_DIR)
-        volumes[f"{HOST_PROJECT_DIR}/{relative}"] = {"bind": target, "mode": "ro"}
+        relative = resolved.relative_to(plugin_dir)
+        volumes[f"{host_plugin_dir}/{relative}"] = {"bind": target, "mode": "ro"}
 
     return volumes
 
@@ -158,6 +171,15 @@ def _start(plugin_id: str, service_name: str, env_overrides: dict) -> dict:
     spec = next((s for s in manifest.services if s.name == service_name), None)
     if spec is None:
         raise LookupError(f"Plugin {plugin_id!r} declares no service {service_name!r}.")
+
+    # Running a container is the one genuinely privileged thing a plugin can
+    # ask for, so it is the thing trust gates.
+    if not sources.is_trusted(plugin_id):
+        raise PermissionError(
+            f"Plugin {plugin_id!r} came from an untrusted source "
+            f"({sources.source_of(plugin_id)!r}); sidecar containers are not started for it. "
+            "Mark the source trusted in the dashboard if you want to allow this."
+        )
 
     # The caller may fill in values, but only for the variables the manifest
     # declared; it cannot introduce environment of its own.
@@ -304,12 +326,161 @@ async def handle_stop(request):
     return web.json_response({"status": "ok", "stopped": stopped})
 
 
+# ---------------------------------------------------------------------
+# Sources, catalog and installation.
+
+async def handle_sources(request):
+    installed = sources.load_installed()
+    return web.json_response({
+        "status": "ok",
+        "sources": sources.load_sources(),
+        "installed": installed,
+    })
+
+
+async def handle_add_source(request):
+    data = await request.json()
+    name = (data.get("name") or "").strip()
+    repo = (data.get("repo") or "").strip()
+    branch = (data.get("branch") or "main").strip()
+
+    if not name or not repo:
+        return web.json_response({"status": "error", "message": "name and repo are required"}, status=400)
+    if "/" not in repo or repo.count("/") != 1:
+        return web.json_response(
+            {"status": "error", "message": "repo must look like owner/repository"}, status=400
+        )
+
+    existing = sources.load_sources()
+    if any(s["name"] == name for s in existing):
+        return web.json_response({"status": "error", "message": f"{name!r} already exists"}, status=409)
+
+    existing.append({
+        "name": name,
+        "label": (data.get("label") or name).strip(),
+        "repo": repo,
+        "branch": branch,
+        # A newly added source is never trusted by default; marking it trusted
+        # is a separate, deliberate act.
+        "trusted": False,
+    })
+    sources.save_sources(existing)
+    return web.json_response({"status": "ok", "sources": existing})
+
+
+async def handle_trust_source(request):
+    data = await request.json()
+    name = data.get("name")
+    trusted = bool(data.get("trusted"))
+
+    existing = sources.load_sources()
+    for source in existing:
+        if source["name"] == name:
+            source["trusted"] = trusted
+            sources.save_sources(existing)
+            log.info("Source %r is now %s.", name, "trusted" if trusted else "untrusted")
+            return web.json_response({"status": "ok", "sources": existing})
+
+    return web.json_response({"status": "error", "message": f"No source named {name!r}"}, status=404)
+
+
+async def handle_remove_source(request):
+    data = await request.json()
+    name = data.get("name")
+
+    existing = sources.load_sources()
+    remaining = [s for s in existing if s["name"] != name]
+    if len(remaining) == len(existing):
+        return web.json_response({"status": "error", "message": f"No source named {name!r}"}, status=404)
+
+    sources.save_sources(remaining)
+    return web.json_response({"status": "ok", "sources": remaining})
+
+
+async def handle_catalog(request):
+    """Everything on offer, across every configured source."""
+    installed = sources.load_installed()
+    entries = []
+    errors = {}
+
+    for source in sources.load_sources():
+        try:
+            catalog = await sources.fetch_catalog(source)
+        except sources.SourceError as e:
+            errors[source["name"]] = str(e)
+            continue
+
+        for plugin in catalog.get("plugins", []):
+            plugin_id = plugin.get("id")
+            if not plugin_id:
+                continue
+            record = installed.get(plugin_id)
+            entries.append({
+                **plugin,
+                "source": source["name"],
+                "source_label": source.get("label", source["name"]),
+                "trusted": bool(source.get("trusted")),
+                "installed": record is not None,
+                "installed_version": record["version"] if record else None,
+                # Only meaningful when installed from a different source.
+                "installed_from": record["source"] if record else None,
+            })
+
+    return web.json_response({"status": "ok", "plugins": entries, "errors": errors})
+
+
+async def handle_install(request):
+    data = await request.json()
+    source_name = data.get("source")
+    plugin_id = data.get("plugin")
+
+    if not source_name or not plugin_id:
+        return web.json_response(
+            {"status": "error", "message": "source and plugin are required"}, status=400
+        )
+
+    try:
+        result = await sources.install(source_name, plugin_id)
+    except sources.SourceError as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=400)
+    except Exception as e:
+        log.exception("Failed to install %s from %s", plugin_id, source_name)
+        return web.json_response({"status": "error", "message": f"{type(e).__name__}: {e}"}, status=500)
+
+    return web.json_response({"status": "ok", "plugin": result})
+
+
+async def handle_uninstall(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+
+    # Its containers go with it; leaving them running would orphan them.
+    try:
+        await asyncio.to_thread(_stop, plugin_id, None)
+    except Exception:
+        log.exception("Failed to stop services for %s during uninstall", plugin_id)
+
+    try:
+        await asyncio.to_thread(sources.uninstall, plugin_id)
+    except sources.SourceError as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=404)
+
+    return web.json_response({"status": "ok"})
+
+
 def make_app():
     app = web.Application()
     app.router.add_get("/health", handle_health)
     app.router.add_get("/services", handle_list)
     app.router.add_post("/services/start", handle_start)
     app.router.add_post("/services/stop", handle_stop)
+    app.router.add_get("/sources", handle_sources)
+    app.router.add_post("/sources/add", handle_add_source)
+    app.router.add_post("/sources/trust", handle_trust_source)
+    app.router.add_post("/sources/remove", handle_remove_source)
+    app.router.add_get("/catalog", handle_catalog)
+    app.router.add_post("/plugins/install", handle_install)
+    app.router.add_post("/plugins/uninstall", handle_uninstall)
     return app
 
 

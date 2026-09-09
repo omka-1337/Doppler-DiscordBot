@@ -1054,6 +1054,11 @@ function renderPluginCard(plugin) {
             <!-- The controls sit inside the clickable header, so their clicks
                  must not also open or close the card. -->
             <div class="flex items-center gap-3 shrink-0" onclick="event.stopPropagation()">
+                ${plugin.installed_from === 'installed' ? `
+                <button onclick="uninstallPlugin('${plugin.id}')" title="Remove this plugin's files"
+                    class="bg-[#1e1f22] hover:bg-red-600/80 border border-[#3f4147] text-gray-300 hover:text-white px-3 py-1.5 rounded transition text-xs font-semibold">
+                    🗑
+                </button>` : ''}
                 <button onclick="reloadPlugin('${plugin.id}')" title="Reload this plugin's code without restarting the bot"
                     class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 px-3 py-1.5 rounded transition text-xs font-semibold">
                     ♻️ Reload
@@ -1152,4 +1157,271 @@ async function savePluginSettings(pluginId) {
     } catch (e) {
         alert('Error connecting to the server.');
     }
+}
+
+// ---------------------------------------------------------------------
+// PLUGIN BROWSER
+//
+// The bot cannot install anything itself: the plugins directory and the trust
+// configuration are read-only in its container. Everything here goes through
+// the bot to the broker, which is the only component allowed to write them.
+
+function switchPluginView(view) {
+    document.querySelectorAll('.plugin-view').forEach(pane => pane.classList.add('hidden'));
+    document.querySelectorAll('.plugin-view-btn').forEach(btn => {
+        btn.className = 'plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
+    });
+
+    const paneId = { installed: 'pluginInstalled', browse: 'pluginBrowse', sources: 'pluginSources' }[view];
+    const pane = document.getElementById(paneId);
+    if (pane) pane.classList.remove('hidden');
+
+    const btn = document.getElementById(`plgview-btn-${view}`);
+    if (btn) btn.className = 'plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white';
+
+    if (view === 'browse') loadCatalog();
+    if (view === 'sources') loadPluginSources();
+    if (view === 'installed') loadPlugins();
+}
+
+function trustBadge(trusted) {
+    return trusted
+        ? '<span class="text-[10px] text-green-400 font-semibold">✓ TRUSTED</span>'
+        : '<span class="text-[10px] text-amber-400 font-semibold">⚠ UNTRUSTED</span>';
+}
+
+function renderCatalogEntry(entry) {
+    const services = (entry.services || []).length
+        ? `<span class="text-[10px] text-amber-400" title="This plugin runs a container of its own">📦 runs ${escapeHtml((entry.services || []).join(', '))}</span>`
+        : '';
+
+    const action = entry.installed
+        ? `<button onclick="installPlugin('${entry.source}', '${entry.id}')"
+               class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 px-3 py-1.5 rounded transition text-xs font-semibold">
+               ⬆ Reinstall
+           </button>
+           <button onclick="uninstallPlugin('${entry.id}')"
+               class="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded transition text-xs font-semibold">
+               🗑 Uninstall
+           </button>`
+        : `<button onclick="installPlugin('${entry.source}', '${entry.id}')"
+               class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded transition text-xs font-bold">
+               ⬇ Install
+           </button>`;
+
+    const installedNote = entry.installed
+        ? `<span class="text-[10px] text-gray-500">installed v${escapeHtml(entry.installed_version || '?')}</span>`
+        : '';
+
+    return `
+    <div class="bg-[#2b2d31] p-5 rounded-lg border border-[#3f4147] shadow-lg flex items-start justify-between gap-4">
+        <div class="flex items-start gap-3">
+            <span class="text-2xl leading-none">${escapeHtml(entry.icon || '🧩')}</span>
+            <div>
+                <h3 class="text-white font-bold flex items-center gap-2 flex-wrap">
+                    ${escapeHtml(entry.name || entry.id)}
+                    <span class="text-[10px] text-gray-500 font-mono">v${escapeHtml(entry.version || '?')}</span>
+                    ${trustBadge(entry.trusted)}
+                    ${installedNote}
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">${escapeHtml(entry.description || '')}</p>
+                <p class="text-[10px] text-gray-500 mt-1 font-mono">
+                    ${escapeHtml(entry.id)}${entry.author ? ' · ' + escapeHtml(entry.author) : ''} · from ${escapeHtml(entry.source_label || entry.source)}
+                    ${services}
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">${action}</div>
+    </div>`;
+}
+
+async function loadCatalog() {
+    const list = document.getElementById('pluginCatalog');
+    if (!list) return;
+    list.innerHTML = '<p class="text-xs text-gray-400">Loading catalogue...</p>';
+
+    try {
+        const res = await fetch('/api/plugins/catalog');
+        const data = await res.json();
+        if (!res.ok) {
+            list.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
+            return;
+        }
+
+        // A source that cannot be reached is reported rather than silently
+        // dropped, so a typo in a repo name is visible.
+        const errors = Object.entries(data.errors || {})
+            .map(([name, message]) =>
+                `<p class="text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2 font-mono">${escapeHtml(name)}: ${escapeHtml(message)}</p>`)
+            .join('');
+
+        const entries = (data.plugins || []).map(renderCatalogEntry).join('');
+        list.innerHTML = errors + (entries || '<p class="text-xs text-gray-400">No plugins offered by the configured sources.</p>');
+    } catch (e) {
+        list.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function installPlugin(source, pluginId) {
+    if (!confirm(`Install "${pluginId}" from "${source}"?\n\nThis runs someone else's code inside your bot.`)) return;
+
+    try {
+        const res = await fetch('/api/plugins/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source, plugin: pluginId })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(`Install failed: ${data.detail || 'unknown error'}`);
+        } else if (data.error) {
+            alert(`${pluginId} was installed but failed to load:\n\n${data.error}`);
+        } else {
+            alert(`${pluginId} installed${data.running ? ' and running' : ''}.`);
+        }
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadCatalog();
+}
+
+async function uninstallPlugin(pluginId) {
+    if (!confirm(`Uninstall "${pluginId}"?\n\nIts files and any containers it started are removed. Its saved settings are kept.`)) return;
+
+    try {
+        const res = await fetch('/api/plugins/uninstall', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(`Uninstall failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    // Called from both the catalogue and the installed list, so refresh
+    // whichever pane is actually on screen.
+    if (!document.getElementById('pluginBrowse').classList.contains('hidden')) {
+        loadCatalog();
+    } else {
+        loadPlugins();
+    }
+}
+
+function renderSourceRow(source, installedCount) {
+    return `
+    <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] flex items-center justify-between gap-4">
+        <div>
+            <h4 class="text-white font-bold text-sm flex items-center gap-2">
+                ${escapeHtml(source.label || source.name)} ${trustBadge(source.trusted)}
+            </h4>
+            <p class="text-[11px] text-gray-400 mt-1 font-mono">
+                ${escapeHtml(source.repo)} · ${escapeHtml(source.branch)}
+                ${installedCount ? `· ${installedCount} installed` : ''}
+            </p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+            <label class="flex items-center gap-2 cursor-pointer" title="Trusted sources may run sidecar containers">
+                <span class="text-[10px] text-gray-400 uppercase font-bold">Trusted</span>
+                <span class="relative inline-flex items-center">
+                    <input type="checkbox" ${source.trusted ? 'checked' : ''}
+                        onchange="setSourceTrust('${source.name}', this.checked)" class="sr-only peer">
+                    <span class="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></span>
+                </span>
+            </label>
+            <button onclick="removePluginSource('${source.name}')"
+                class="bg-[#1e1f22] hover:bg-red-600/80 border border-[#3f4147] text-gray-300 hover:text-white px-3 py-1.5 rounded transition text-xs font-semibold">
+                Remove
+            </button>
+        </div>
+    </div>`;
+}
+
+async function loadPluginSources() {
+    const list = document.getElementById('sourcesList');
+    if (!list) return;
+
+    try {
+        const res = await fetch('/api/plugins/sources');
+        const data = await res.json();
+        if (!res.ok) {
+            list.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
+            return;
+        }
+
+        const installed = data.installed || {};
+        const counts = {};
+        Object.values(installed).forEach(entry => {
+            counts[entry.source] = (counts[entry.source] || 0) + 1;
+        });
+
+        const rows = (data.sources || []).map(s => renderSourceRow(s, counts[s.name] || 0)).join('');
+        list.innerHTML = rows || '<p class="text-xs text-gray-400">No sources configured.</p>';
+    } catch (e) {
+        list.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function addPluginSource() {
+    const name = document.getElementById('source-name').value.trim();
+    const repo = document.getElementById('source-repo').value.trim();
+    const branch = document.getElementById('source-branch').value.trim() || 'main';
+
+    if (!name || !repo) {
+        alert('A short name and an owner/repository are both required.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/plugins/sources/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, repo, branch, label: name })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(`Could not add the source: ${data.detail || 'unknown error'}`);
+        } else {
+            document.getElementById('source-name').value = '';
+            document.getElementById('source-repo').value = '';
+        }
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPluginSources();
+}
+
+async function setSourceTrust(name, trusted) {
+    if (trusted && !confirm(
+        `Mark "${name}" as trusted?\n\nPlugins from a trusted source are allowed to start containers of their own.`
+    )) {
+        loadPluginSources();
+        return;
+    }
+
+    try {
+        await fetch('/api/plugins/sources/trust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, trusted })
+        });
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPluginSources();
+}
+
+async function removePluginSource(name) {
+    if (!confirm(`Remove the source "${name}"?\n\nPlugins already installed from it stay, but stop being trusted.`)) return;
+
+    try {
+        await fetch('/api/plugins/sources/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, trusted: false })
+        });
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPluginSources();
 }

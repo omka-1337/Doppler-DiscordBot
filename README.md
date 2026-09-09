@@ -15,7 +15,7 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 - 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), per-module enable/disable toggles, and settings management for every feature above.
 - 🔐 **Dashboard Login** (optional) — gate the dashboard behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It switches itself on once a home server is set and a Client Secret is saved in Settings — the Client ID is detected automatically, and the login page shows you the exact redirect URI to register (with a copy button and a direct link to your app's OAuth2 page).
 
-Every feature above is a plugin, enabled, configured and reloaded from the dashboard's **Plugins** tab.
+**Doppler ships empty.** Every feature above is a plugin, installed from the dashboard's **Plugins → Browse** tab and then enabled, configured and reloaded from **Plugins → Installed**. The official plugins live on this repository's [`doppler/plugins`](../../tree/doppler/plugins) branch, which is configured as a trusted source out of the box.
 
 ## Plugins
 
@@ -49,6 +49,37 @@ A plugin declares its settings in code and the dashboard generates the form from
 That last point is a namespace boundary, not a sandbox — a plugin is Python running in the bot's own process. **Installing a third-party plugin means running third-party code**, so only install plugins you trust.
 
 Cogs and persistent views registered through `self.ctx` are removed automatically when the plugin is unloaded, which is what makes the dashboard's **Reload** button able to swap a plugin's code in place while the bot stays connected.
+
+### Sources and trust
+
+Plugins are installed from *sources* — a GitHub repository and branch holding
+one directory per plugin plus an `index.json` catalogue. `config/sources.json`
+lists them:
+
+```json
+{
+  "sources": [
+    {
+      "name": "doppler-official",
+      "repo": "omka-1337/Doppler-DiscordBot",
+      "branch": "doppler/plugins",
+      "trusted": true
+    }
+  ]
+}
+```
+
+A newly added source is **untrusted** until you say otherwise, and trust is not
+decoration: the broker refuses to start sidecar containers for a plugin that
+came from an untrusted source. A plugin that ships in `dopplerbot/plugins/builtin/`
+counts as trusted, because it is part of the bot.
+
+`config/` and `plugins/` are mounted **read-only into the bot container** and
+writable only in the broker. That is what makes the flag mean anything: plugin
+code runs inside the bot's process, so if it could write `sources.json` it
+could mark its own source trusted, and if it could write `plugins/` it could
+overwrite a trusted plugin's code. Both are enforced by the mount, not by a
+check in the code — a plugin trying it gets `Read-only file system`.
 
 ### Sidecar containers
 

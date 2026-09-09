@@ -274,13 +274,68 @@
                     </h2>
                     <p class="text-xs text-gray-400 mt-1">{{ t.plugins.description }}</p>
                 </div>
-                <button onclick="rescanPlugins()"
-                    class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-4 py-2 rounded transition text-xs">
-                    {{ t.plugins.rescan }}
-                </button>
+
+                <div class="flex gap-2 bg-[#1e1f22] p-1 rounded-md border border-[#3f4147]">
+                    <button onclick="switchPluginView('installed')" id="plgview-btn-installed"
+                        class="plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white">
+                        {{ t.plugins.view_installed }}
+                    </button>
+                    <button onclick="switchPluginView('browse')" id="plgview-btn-browse"
+                        class="plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.plugins.view_browse }}
+                    </button>
+                    <button onclick="switchPluginView('sources')" id="plgview-btn-sources"
+                        class="plugin-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                        {{ t.plugins.view_sources }}
+                    </button>
+                </div>
             </div>
 
-            <div id="pluginsList" class="space-y-4">
+            <!-- BROWSE: plugins offered by the configured sources -->
+            <div id="pluginBrowse" class="plugin-view hidden space-y-4">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-gray-400">{{ t.plugins.browse_hint }}</p>
+                    <button onclick="loadCatalog()"
+                        class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-4 py-2 rounded transition text-xs">
+                        {{ t.plugins.refresh }}
+                    </button>
+                </div>
+                <div id="pluginCatalog" class="space-y-4">
+                    <p class="text-xs text-gray-400">{{ t.plugins.loading }}</p>
+                </div>
+            </div>
+
+            <!-- SOURCES: where plugins may come from, and which are trusted -->
+            <div id="pluginSources" class="plugin-view hidden space-y-4">
+                <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] space-y-3">
+                    <p class="text-xs text-gray-400">{{ t.plugins.sources_hint }}</p>
+                    <div class="flex flex-wrap gap-2">
+                        <input type="text" id="source-name" placeholder="short name, e.g. my-plugins"
+                            class="flex-1 min-w-[10rem] bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-xs focus:outline-none focus:border-indigo-500 transition">
+                        <input type="text" id="source-repo" placeholder="owner/repository"
+                            class="flex-1 min-w-[10rem] bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
+                        <input type="text" id="source-branch" placeholder="branch" value="main"
+                            class="w-32 bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
+                        <button onclick="addPluginSource()"
+                            class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded transition text-xs">
+                            + Add source
+                        </button>
+                    </div>
+                </div>
+                <div id="sourcesList" class="space-y-3">
+                    <p class="text-xs text-gray-400">{{ t.plugins.loading }}</p>
+                </div>
+            </div>
+
+            <!-- INSTALLED -->
+            <div id="pluginInstalled" class="plugin-view space-y-4">
+                <div class="flex items-center justify-end">
+                    <button onclick="rescanPlugins()"
+                        class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-4 py-2 rounded transition text-xs">
+                        {{ t.plugins.rescan }}
+                    </button>
+                </div>
+                <div id="pluginsList" class="space-y-4">
                 <p class="text-xs text-gray-400">{{ t.plugins.loading }}</p>
             </div>
         </div>

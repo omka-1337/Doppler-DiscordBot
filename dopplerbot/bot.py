@@ -320,6 +320,84 @@ async def handle_plugin_settings(request):
 
 # ---------------------------------------------------------------------
 
+# PLUGIN SOURCES AND INSTALLATION
+# The broker owns the trust configuration and the plugins directory -- both are
+# read-only in this container -- so everything here is a pass-through. The bot
+# adds only what the broker cannot know: reloading its own registry afterwards.
+BROKER_URL = os.getenv("BROKER_URL", "http://doppler_service_broker:8002")
+
+
+async def _call_broker(method: str, path: str, payload=None):
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(f"{BROKER_URL}{path}", timeout=60.0)
+            else:
+                response = await client.post(f"{BROKER_URL}{path}", json=payload or {}, timeout=300.0)
+    except Exception as e:
+        return web.json_response(
+            {"status": "error", "message": f"Service broker is not reachable: {e}"}, status=503
+        )
+
+    return web.json_response(response.json(), status=response.status_code)
+
+
+async def handle_sources(request):
+    return await _call_broker("GET", "/sources")
+
+
+async def handle_catalog(request):
+    return await _call_broker("GET", "/catalog")
+
+
+async def handle_add_source(request):
+    return await _call_broker("POST", "/sources/add", await request.json())
+
+
+async def handle_trust_source(request):
+    return await _call_broker("POST", "/sources/trust", await request.json())
+
+
+async def handle_remove_source(request):
+    return await _call_broker("POST", "/sources/remove", await request.json())
+
+
+async def handle_install_plugin(request):
+    data = await request.json()
+    response = await _call_broker("POST", "/plugins/install", data)
+    if response.status != 200:
+        return response
+
+    plugin_id = data.get("plugin")
+    bot.plugins.discover()
+
+    # Installing something and then having to switch it on separately is a
+    # pointless extra step when the plugin says it wants to be on.
+    if await bot.plugins.is_enabled(plugin_id):
+        await bot.plugins.load(plugin_id)
+        await sync_commands()
+
+    return web.json_response({
+        "status": "ok",
+        "running": plugin_id in bot.plugins.loaded,
+        "error": bot.plugins.errors.get(plugin_id),
+    })
+
+
+async def handle_uninstall_plugin(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+
+    # Unload first: the code has to stop running before its files disappear.
+    await bot.plugins.unload(plugin_id, stop_services=True)
+
+    response = await _call_broker("POST", "/plugins/uninstall", data)
+    bot.plugins.discover()
+    await sync_commands()
+    return response
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
@@ -337,6 +415,13 @@ async def start_internal_api():
     app.router.add_post("/internal/plugins/toggle", handle_toggle_plugin)
     app.router.add_post("/internal/plugins/reload", handle_reload_plugin)
     app.router.add_post("/internal/plugins/settings", handle_plugin_settings)
+    app.router.add_get("/internal/sources", handle_sources)
+    app.router.add_post("/internal/sources/add", handle_add_source)
+    app.router.add_post("/internal/sources/trust", handle_trust_source)
+    app.router.add_post("/internal/sources/remove", handle_remove_source)
+    app.router.add_get("/internal/catalog", handle_catalog)
+    app.router.add_post("/internal/plugins/install", handle_install_plugin)
+    app.router.add_post("/internal/plugins/uninstall", handle_uninstall_plugin)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
     # stats tab) — per-request access logs here are just noise in latest.log.
     runner = web.AppRunner(app, access_log=None)

@@ -5,6 +5,11 @@ services:
     restart: unless-stopped
     volumes:
       - .:/app
+      # Plugin code runs in this container, so the two directories that decide
+      # what is trusted and what gets loaded are mounted read-only here. Only
+      # the broker may change them.
+      - ./config:/app/config:ro
+      - ./plugins:/app/plugins:ro
     depends_on:
       - broker
 
@@ -22,11 +27,10 @@ services:
     depends_on:
       - bot
 
-  # Starts the sidecar containers plugins declare in their manifests (Lavalink,
-  # for the music plugin). This is the only container with access to the Docker
-  # socket -- the bot, which runs plugin code, deliberately has none. It reads
-  # the manifests itself from a read-only mount of the project, so it never
-  # takes a container specification from its caller.
+  # Starts the sidecar containers plugins declare in their manifests, installs
+  # plugins from configured sources, and owns the trust configuration. This is
+  # the only container with access to the Docker socket -- the bot, which runs
+  # plugin code, deliberately has none.
   broker:
     build:
       context: .
@@ -40,5 +44,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/project:ro
+      # The writable side of the two directories the bot only reads.
+      - ./config:/config
+      - ./plugins:/plugins
     expose:
       - "8002"

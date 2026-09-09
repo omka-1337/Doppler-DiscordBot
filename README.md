@@ -22,10 +22,13 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 A plugin is a self-contained folder holding a `plugin.json` manifest and its Python code. Built-in plugins ship in `dopplerbot/plugins/builtin/`; anything installed at runtime lands in `plugins/` at the repo root, which is bind-mounted and ignored by git, so installed plugins survive an image rebuild.
 
 ```
-plugins/my_plugin/
-├── plugin.json     # id, name, version, api_version, description, author, icon
-└── plugin.py       # a subclass of dopplerbot.plugins.api.Plugin
+plugins/my_plugin/          # installed plugins; the broker writes this
+├── plugin.json             # id, name, version, api_version, description, icon
+└── plugin.py               # a subclass of dopplerbot.plugins.api.Plugin
 ```
+
+(`dopplerbot/plugins/` is the plugin *system* — the loader, the manifest parser
+and the `api` module plugins import. No plugin lives there.)
 
 Settings are key/value; a plugin that needs real tables gets its own SQLite
 database at `savedata/plugins/<id>/data.db` through `ctx.db`, and creates its
@@ -72,7 +75,8 @@ the accident, not the attack.
 ### Sources and trust
 
 Plugins are installed from *sources* — a GitHub repository and branch holding
-one directory per plugin plus an `index.json` catalogue. `config/sources.json`
+one directory per plugin plus an `index.json` catalogue. There is exactly one
+place plugins live, `plugins/`, and only the broker writes it. `config/sources.json`
 lists them:
 
 ```json
@@ -90,8 +94,10 @@ lists them:
 
 A newly added source is **untrusted** until you say otherwise, and trust is not
 decoration: the broker refuses to start sidecar containers for a plugin that
-came from an untrusted source. A plugin that ships in `dopplerbot/plugins/builtin/`
-counts as trusted, because it is part of the bot.
+came from an untrusted source. Only a plugin the broker itself installed from a
+currently-trusted source qualifies — a directory dropped into `plugins/` by hand
+still loads and runs, but gets no containers, because there is no record of
+where it came from.
 
 `config/` and `plugins/` are mounted **read-only into the bot container** and
 writable only in the broker. That is what makes the flag mean anything: plugin

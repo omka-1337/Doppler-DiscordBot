@@ -1,12 +1,10 @@
 """Plugin discovery, loading and hot-reloading.
 
-Plugins live in one of two roots:
-
-* ``dopplerbot/plugins/builtin/`` -- shipped with the bot, tracked in git.
-* ``plugins/`` at the repo root -- installed at runtime (this is where the
-  dashboard's plugin browser will put what it downloads). It is bind-mounted
-  into the container and ignored by git, so installed plugins survive an image
-  rebuild and never end up in the user's commits.
+Plugins live in ``plugins/`` at the repo root: the broker installs them there
+from a configured source, and the directory is mounted **read-only** into the
+bot. There is deliberately no second root inside the bot's own package -- one
+that plugin code could write to would let a plugin plant a plugin, and the
+broker would have no way to tell it apart from something an operator installed.
 
 Every plugin is imported under a single synthetic package, ``doppler_plugins``,
 whose search path is those two roots. That buys two things: a plugin's own
@@ -17,6 +15,7 @@ what makes reloading a plugin without restarting the bot possible.
 
 import importlib
 import importlib.machinery
+import json
 import importlib.util
 import inspect
 import logging
@@ -38,11 +37,13 @@ from dopplerbot.plugins.manifest import (
 log = logging.getLogger("plugins")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-BUILTIN_ROOT = Path(__file__).resolve().parent / "builtin"
 INSTALLED_ROOT = _REPO_ROOT / "plugins"
 
-# Builtin first: an installed plugin must not silently shadow a shipped one.
-PLUGIN_ROOTS = (BUILTIN_ROOT, INSTALLED_ROOT)
+PLUGIN_ROOTS = (INSTALLED_ROOT,)
+
+# Written by the broker; read-only here. Says which source each plugin came
+# from, so the dashboard can show it and offer to uninstall.
+INSTALLED_RECORD = _REPO_ROOT / "config" / "installed.json"
 
 # Settings category holding each plugin's on/off state, keyed by plugin id.
 ENABLED_CATEGORY = "Plugins"
@@ -127,6 +128,13 @@ class PluginRegistry:
         _install_plugin_package()
 
     # ---------------------------------------------------------------- discovery
+
+    @staticmethod
+    def _installed_record() -> dict:
+        try:
+            return json.loads(INSTALLED_RECORD.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
 
     def discover(self) -> dict[str, PluginManifest]:
         """Re-scan both roots for valid plugin directories."""
@@ -281,6 +289,7 @@ class PluginRegistry:
 
     async def describe(self) -> list[dict]:
         """Everything the dashboard needs to render the plugins page."""
+        installed = self._installed_record()
         out = []
         for plugin_id, manifest in self.manifests.items():
             entry = self.loaded.get(plugin_id)
@@ -288,7 +297,10 @@ class PluginRegistry:
             out.append({
                 **manifest.to_dict(),
                 "services": [service.to_dict() for service in manifest.services],
-                "installed_from": "builtin" if manifest.path and manifest.path.parent == BUILTIN_ROOT else "installed",
+                # The source it was installed from, or "local" for a directory
+                # someone put there by hand -- which the broker cannot uninstall
+                # and does not consider trusted.
+                "installed_from": installed.get(plugin_id, {}).get("source", "local"),
                 "enabled": await self.is_enabled(plugin_id),
                 "running": entry is not None,
                 "error": self.errors.get(plugin_id),

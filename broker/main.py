@@ -42,11 +42,9 @@ PROJECT_DIR = Path("/project")
 HOST_PROJECT_DIR = os.getenv("HOST_PROJECT_DIR", "")
 
 # (path inside this container, path relative to the project on the host).
-# Installed plugins come through the writable /plugins mount rather than the
-# read-only project view, because the broker is the only thing allowed to
-# write there.
+# One root only: plugins come through the /plugins mount, which the broker
+# writes and the bot only reads.
 PLUGIN_ROOTS = [
-    (PROJECT_DIR / "dopplerbot" / "plugins" / "builtin", "dopplerbot/plugins/builtin"),
     (sources.INSTALLED_ROOT, "plugins"),
 ]
 

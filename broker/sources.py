@@ -75,12 +75,14 @@ def find_source(name: str) -> dict:
 def is_trusted(plugin_id: str) -> bool:
     """Whether a plugin may be granted privileged capabilities.
 
-    A plugin the broker did not install is one that shipped with the bot, so it
-    is as trusted as the bot itself.
+    Only a plugin this broker installed from a source currently marked trusted
+    qualifies. Anything else -- a directory placed by hand, or one left behind
+    by a source that has since been removed -- is not trusted: the broker has
+    no evidence of where it came from, and "no evidence" must not mean "yes".
     """
     entry = load_installed().get(plugin_id)
     if entry is None:
-        return True
+        return False
 
     try:
         return bool(find_source(entry["source"]).get("trusted"))

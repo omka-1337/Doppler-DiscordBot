@@ -15,7 +15,7 @@ from dopplerbot.plugins.api import (
     ServiceUnavailable,
     SettingType,
 )
-from dopplerbot.plugins.loader import BUILTIN_ROOT, INSTALLED_ROOT, PluginRegistry
+from dopplerbot.plugins.loader import INSTALLED_ROOT, PluginRegistry
 from dopplerbot.plugins.manifest import (
     CURRENT_API_VERSION,
     MANIFEST_FILENAME,
@@ -36,7 +36,6 @@ __all__ = [
     "ServiceUnavailable",
     "SettingType",
     "PluginRegistry",
-    "BUILTIN_ROOT",
     "INSTALLED_ROOT",
     "PluginManifest",
     "PluginManifestError",

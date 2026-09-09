@@ -1054,7 +1054,7 @@ function renderPluginCard(plugin) {
             <!-- The controls sit inside the clickable header, so their clicks
                  must not also open or close the card. -->
             <div class="flex items-center gap-3 shrink-0" onclick="event.stopPropagation()">
-                ${plugin.installed_from === 'installed' ? `
+                ${plugin.installed_from !== 'local' ? `
                 <button onclick="uninstallPlugin('${plugin.id}')" title="Remove this plugin's files"
                     class="bg-[#1e1f22] hover:bg-red-600/80 border border-[#3f4147] text-gray-300 hover:text-white px-3 py-1.5 rounded transition text-xs font-semibold">
                     🗑

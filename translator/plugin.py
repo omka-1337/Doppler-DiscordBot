@@ -4,10 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
+from dopplerbot.plugins.api import Plugin, TranslationError
 
 from .locale_mapping import display_name, display_name_from_provider_code, get_base_lang
-from .service import TranslationError, translate
 
 logger = logging.getLogger(__name__)
 
@@ -42,18 +41,14 @@ class TranslatorCog(commands.Cog):
         # the 3-second interaction timeout.
         await interaction.response.defer(ephemeral=True)
 
-        settings = await self.plugin.settings.all()
         target_base_lang = get_base_lang(interaction.locale)
 
         try:
-            result = await translate(
-                text[:MAX_TEXT_LENGTH],
-                target_base_lang,
-                provider=settings["provider"],
-                deepl_api_key=settings["deepl_api_key"],
-                google_api_key=settings["google_api_key"],
-            )
-        except TranslationError:
+            # The provider and its key belong to the bot: this asks for a
+            # translation and never sees a credential.
+            result = await self.plugin.ctx.translate.text(text[:MAX_TEXT_LENGTH], target_base_lang)
+        except TranslationError as e:
+            self.plugin.log.error("Translation failed: %s", e)
             await interaction.followup.send(
                 "❌ Не вдалося виконати переклад. Спробуйте пізніше.", ephemeral=True
             )
@@ -63,38 +58,17 @@ class TranslatorCog(commands.Cog):
         target_display = display_name(result.target_lang)
 
         reply = (
-            f"{result.translated_text}\n\n"
-            f"— {source_display} → {target_display} ({result.provider_used})"
+            f"{result.text}\n\n"
+            f"— {source_display} → {target_display} ({result.provider})"
         )
 
         await interaction.followup.send(reply, ephemeral=True)
 
 
 class TranslatorPlugin(Plugin):
-    SETTINGS = (
-        PluginSetting(
-            "provider",
-            SettingType.SELECT,
-            default="google",
-            label="Translation provider",
-            description="DeepL falls back to Google automatically if no DeepL key is set.",
-            choices=(("google", "Google"), ("deepl", "DeepL")),
-        ),
-        PluginSetting(
-            "deepl_api_key",
-            SettingType.SECRET,
-            default="",
-            label="DeepL API key",
-            description="Required to use DeepL. Leave empty to always use Google.",
-        ),
-        PluginSetting(
-            "google_api_key",
-            SettingType.SECRET,
-            default="",
-            label="Google Cloud Translate API key",
-            description="Optional. Without it, a free keyless Google fallback is used instead.",
-        ),
-    )
+    # No settings: which translation service is used, and its key, are the
+    # bot's configuration under Settings -> Providers.
+    SETTINGS = ()
 
     async def setup(self):
         await self.ctx.add_cog(TranslatorCog(self))

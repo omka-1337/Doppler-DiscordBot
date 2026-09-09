@@ -54,33 +54,6 @@ def get_base_lang(locale: discord.Locale) -> str:
     return _LOCALE_VALUE_TO_BASE.get(str(locale), DEFAULT_BASE_LANG)
 
 
-# base lang -> DeepL target language code.
-# DeepL wants uppercase codes and has a few special cases (regional English /
-# Portuguese variants must be spelled out, Chinese and Norwegian use their own codes).
-_BASE_TO_DEEPL: dict[str, str] = {
-    "en": "EN-US",
-    "pt-BR": "PT-BR",
-    "zh-CN": "ZH",
-    "zh-TW": "ZH",
-    "no": "NB",
-}
-
-
-def to_deepl_lang(base_lang: str) -> str:
-    return _BASE_TO_DEEPL.get(base_lang, base_lang.upper())
-
-
-# base lang -> Google target language code (same codes work for both the
-# official Google Cloud API and the free deep-translator fallback).
-_BASE_TO_GOOGLE: dict[str, str] = {
-    "pt-BR": "pt",
-}
-
-
-def to_google_lang(base_lang: str) -> str:
-    return _BASE_TO_GOOGLE.get(base_lang, base_lang.lower())
-
-
 # human-readable name + flag, used in the ephemeral reply footer
 _BASE_LANG_DISPLAY: dict[str, str] = {
     "en": "🇬🇧 English",

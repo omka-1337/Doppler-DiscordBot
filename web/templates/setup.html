@@ -76,6 +76,18 @@
             </a>
         </div>
 
+        <!-- INVITE (only once the bot is running but has joined nothing yet) -->
+        <div id="inviteBox" class="hidden bg-[#1e1f22] border border-indigo-500/40 rounded-lg p-4 space-y-2">
+            <p class="text-xs text-gray-300 leading-relaxed">
+                The bot is online but is not in a server yet. Invite it — the first server it
+                joins becomes its home, and login checks ownership there.
+            </p>
+            <a id="inviteLink" href="#" target="_blank"
+                class="inline-block bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded transition text-xs">
+                Invite the bot ↗
+            </a>
+        </div>
+
         <!-- SAVE -->
         <div class="space-y-3">
             <button type="button" id="saveBtn" onclick="save()" disabled
@@ -175,23 +187,76 @@
         }
 
         async function save() {
-            const btn = $('saveBtn');
-            btn.disabled = true;
+            $('saveBtn').disabled = true;
+            $('token').disabled = true;
+            $('secret').disabled = true;
             setStatus($('saveStatus'), null, 'Saving...');
             try {
                 const { ok, data } = await post('/api/setup/save', {
                     token: $('token').value, client_secret: $('secret').value
                 });
                 if (ok) {
-                    setStatus($('saveStatus'), true, 'Saved. The bot will start shortly — taking you to login...');
-                    setTimeout(() => window.location.href = data.redirect || '/auth/login', 1500);
+                    waitForBot();
                     return;
                 }
                 setStatus($('saveStatus'), false, '✗ ' + (data.detail || 'Could not save.'));
             } catch (e) {
                 setStatus($('saveStatus'), false, '✗ Could not reach the server.');
             }
-            btn.disabled = false;
+            $('saveBtn').disabled = false;
+            $('token').disabled = false;
+            $('secret').disabled = false;
+        }
+
+        // The bot container has to restart to pick up the new token, and login
+        // cannot authorise anyone until the bot is in a server to check against.
+        // So the page waits here instead of jumping to a login that would fail.
+        async function waitForBot() {
+            let waited = 0;
+
+            for (;;) {
+                await new Promise(r => setTimeout(r, 2000));
+                waited += 2;
+
+                let res;
+                try {
+                    res = await fetch('/api/setup/status');
+                } catch (e) {
+                    continue;
+                }
+
+                // Once the bot has a home server, login becomes mandatory and
+                // this endpoint starts requiring a session — which is itself
+                // the signal that everything is ready.
+                if (res.status === 401) {
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (!res.ok) continue;
+
+                const d = await res.json();
+
+                if (!d.bot_online) {
+                    setStatus($('saveStatus'), null,
+                        waited < 60
+                            ? `Waiting for the bot to come online... (${waited}s)`
+                            : `Still waiting (${waited}s). Check the bot container's logs if this does not clear.`);
+                    continue;
+                }
+
+                if (!d.guild_count) {
+                    if (d.invite_url) {
+                        $('inviteLink').href = d.invite_url;
+                        $('inviteBox').classList.remove('hidden');
+                    }
+                    setStatus($('saveStatus'), null, 'Bot is online. Invite it to your server to continue.');
+                    continue;
+                }
+
+                setStatus($('saveStatus'), true, 'Bot is online and in your server — taking you to login...');
+                setTimeout(() => window.location.href = '/auth/login', 1200);
+                return;
+            }
         }
 
         function copyRedirectUri() {

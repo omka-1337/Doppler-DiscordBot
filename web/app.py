@@ -171,7 +171,14 @@ app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="
 # ---------------------------------------------------------------------
 
 async def get_bot_info() -> dict:
-    headers = {"Authorization": f"Bot {TOKEN}"}
+    # Read at call time, not from the import-time constant: on a fresh install
+    # this process starts with no token, and the one entered during setup would
+    # otherwise be invisible here until the container was restarted.
+    token = os.getenv("DISCORD_BOT_TOKEN", "")
+    if not token:
+        return {"username": "Discord Bot", "global_name": "Discord Bot", "avatar_url": None}
+
+    headers = {"Authorization": f"Bot {token}"}
 
     async with httpx.AsyncClient() as client:
         try:
@@ -327,6 +334,41 @@ async def setup_validate_secret(payload: SetupSecretPayload):
     return JSONResponse(await _verify_client_secret(token_check["client_id"], payload.client_secret))
 
 
+# Permissions the bundled plugins actually need — deliberately not Administrator:
+# temporary voice channels, moderation, the verified role, and revoking invites
+# during a raid lockdown.
+INVITE_PERMISSIONS = 1099796925494
+
+
+@app.get("/api/setup/status")
+async def setup_status():
+    """Whether the bot is up yet, and whether it has joined a server.
+
+    The setup page waits on this instead of jumping straight to login: the bot
+    container needs a moment to start, and login cannot authorise anyone until
+    the bot is actually in a guild to check ownership against.
+    """
+    client_id = await get_discord_client_id()
+    invite_url = (
+        f"{DISCORD_OAUTH_AUTHORIZE_URL}?client_id={client_id}"
+        f"&scope=bot+applications.commands&permissions={INVITE_PERMISSIONS}"
+        if client_id else None
+    )
+
+    online, guilds = False, 0
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BOT_INTERNAL_API}/internal/stats", timeout=3.0)
+        if response.status_code == 200:
+            stats = response.json()
+            online = bool(stats.get("connected"))
+            guilds = stats.get("guild_count", 0)
+    except Exception:
+        pass  # not up yet; the page keeps waiting
+
+    return JSONResponse({"bot_online": online, "guild_count": guilds, "invite_url": invite_url})
+
+
 @app.post("/api/setup/save")
 async def setup_save(payload: SetupSecretPayload):
     # Re-verified here rather than trusting the browser: the buttons that
@@ -359,7 +401,6 @@ async def setup_save(payload: SetupSecretPayload):
     return JSONResponse({
         "status": "ok",
         "bot_username": token_check.get("bot_username", ""),
-        "redirect": "/auth/login",
     })
 
 # ---------------------------------------------------------------------

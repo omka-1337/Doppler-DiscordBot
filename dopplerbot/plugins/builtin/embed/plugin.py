@@ -1,13 +1,19 @@
 import json
-from pathlib import Path
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from dopplerbot.plugins.api import Plugin
+
+
 class EmbedCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.embeds_dir = Path(__file__).resolve().parent.parent.parent / "savedata" / "embeds"
+    def __init__(self, plugin: "EmbedPlugin"):
+        self.plugin = plugin
+        self.bot = plugin.bot
+        # Shared with the dashboard: the panel's Embed Builder writes the
+        # templates and uploaded images that this command reads back.
+        self.embeds_dir = plugin.ctx.savedata_dir / "embeds"
         self.images_dir = self.embeds_dir / "images"
 
     def _list_template_names(self) -> list[str]:
@@ -85,5 +91,10 @@ class EmbedCog(commands.Cog):
             if current_lower in template_name.lower()
         ][:25]
 
-async def setup(bot):
-    await bot.add_cog(EmbedCog(bot))
+class EmbedPlugin(Plugin):
+    # No settings of its own: the templates are authored in the dashboard's
+    # Embed Builder tab rather than configured here.
+    SETTINGS = ()
+
+    async def setup(self):
+        await self.ctx.add_cog(EmbedCog(self))

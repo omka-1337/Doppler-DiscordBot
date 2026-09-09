@@ -3,19 +3,15 @@ import traceback
 import discord
 from discord.ext import commands
 
-from dopplerbot.database import get_settings_by_category
-from utils.ai import GeminiChat, DeepSeekChat, ChatGPTChat
+from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
 
-PROVIDERS = {
-    GeminiChat.PROVIDER_NAME: GeminiChat,
-    DeepSeekChat.PROVIDER_NAME: DeepSeekChat,
-    ChatGPTChat.PROVIDER_NAME: ChatGPTChat,
-}
+from .providers import PROVIDERS, gemini
 
 
 class AIChatCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self, plugin: "AIChatPlugin"):
+        self.plugin = plugin
+        self.bot = plugin.bot
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -29,11 +25,11 @@ class AIChatCog(commands.Cog):
         if not clean_content:
             clean_content = "Hi! Did you need something?"
 
-        ai_settings = await get_settings_by_category("AI")
+        settings = await self.plugin.settings.all()
 
-        provider_name = ai_settings.get("ai_provider", "gemini")
-        provider = PROVIDERS.get(provider_name, GeminiChat)
-        api_key = ai_settings.get(f"ai_{provider_name}_api_key", "")
+        provider_name = settings["provider"]
+        provider = PROVIDERS.get(provider_name, gemini)
+        api_key = settings.get(f"{provider_name}_api_key", "")
 
         if not api_key:
             await message.reply(f"The API key for {provider_name} has not been configured.")
@@ -50,15 +46,10 @@ class AIChatCog(commands.Cog):
 
                 chat_context = '\n'.join(raw_history)
 
-                bot_name = ai_settings.get("ai_bot_name", "Kara AI")
-                force_language = ai_settings.get("ai_force_language", "false") == "true"
-                target_language = ai_settings.get("ai_language", "English")
-                system_prompt = ai_settings.get(
-                    "ai_system_prompt",
-                    "You are a discord server moderator."
-                )
+                bot_name = settings["bot_name"]
+                target_language = settings["language"]
 
-                if force_language:
+                if settings["force_language"]:
                     language_instruction = (
                         f"CRITICAL LANGUAGE RULE: You MUST reply EXCLUSIVELY in {target_language}. "
                         f"Regardless of the language the user speaks to you, always respond in {target_language}."
@@ -69,16 +60,13 @@ class AIChatCog(commands.Cog):
                         "and respond in the EXACT same language."
                     )
 
-                try:
-                    irony = float(ai_settings.get("ai_irony", "0.0"))
-                    seriousness = float(ai_settings.get("ai_seriousness", "1.0"))
-                except ValueError:
-                    irony, seriousness = 0.0, 1.0
+                irony = settings["irony"]
+                seriousness = settings["seriousness"]
 
                 # This is a set of guidelines for the AI regarding its personality and general rules.
                 system_prompt = (
                     f"Your name: {bot_name}.\n"
-                    f"{system_prompt}\n\n"
+                    f"{settings['system_prompt']}\n\n"
                     f"RULES OF CONDUCT:\n"
                     f"- Level of irony/sarcasm: {int(irony * 100)}%.\n"
                     f"- Severity Level: {int(seriousness * 100)}%.\n"
@@ -109,5 +97,66 @@ class AIChatCog(commands.Cog):
                 await message.reply("API error")
 
 
-async def setup(bot):
-    await bot.add_cog(AIChatCog(bot))
+class AIChatPlugin(Plugin):
+    SETTINGS = (
+        PluginSetting(
+            "provider",
+            SettingType.SELECT,
+            default="gemini",
+            label="AI provider",
+            description="Which service answers. Each one needs its own API key below.",
+            choices=(("gemini", "Google Gemini"), ("deepseek", "DeepSeek"), ("chatgpt", "ChatGPT")),
+        ),
+        PluginSetting("gemini_api_key", SettingType.SECRET, default="", label="Gemini API key"),
+        PluginSetting("deepseek_api_key", SettingType.SECRET, default="", label="DeepSeek API key"),
+        PluginSetting("chatgpt_api_key", SettingType.SECRET, default="", label="ChatGPT API key"),
+        PluginSetting(
+            "bot_name",
+            SettingType.STRING,
+            default="Kara AI",
+            label="Persona name",
+            description="The name the AI answers to and refers to itself by.",
+        ),
+        PluginSetting(
+            "system_prompt",
+            SettingType.TEXT,
+            default="You're a moderator on Discord. Be polite and helpful.",
+            label="System prompt",
+            description="Basic instructions that define the behavior and nature of the bot.",
+        ),
+        PluginSetting(
+            "force_language",
+            SettingType.BOOL,
+            default=True,
+            label="Force language",
+            description="If off, the bot replies in whatever language it was addressed in.",
+        ),
+        PluginSetting(
+            "language",
+            SettingType.STRING,
+            default="English",
+            label="Target language",
+            description="Only used when Force language is on.",
+        ),
+        PluginSetting(
+            "irony",
+            SettingType.SLIDER,
+            default=0.2,
+            label="Level of irony",
+            min=0.0,
+            max=1.0,
+            step=0.05,
+        ),
+        PluginSetting(
+            "seriousness",
+            SettingType.SLIDER,
+            default=0.8,
+            label="Severity level",
+            min=0.0,
+            max=1.0,
+            step=0.05,
+        ),
+    )
+
+    async def setup(self):
+        await self.ctx.add_cog(AIChatCog(self))

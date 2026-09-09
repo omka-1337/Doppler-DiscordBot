@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import timedelta, datetime, timezone
 
-import dopplerbot.database as db
+from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
 
 # ---------------------------------------------------------------------
 
@@ -42,8 +42,9 @@ def can_act_on(moderator: discord.Member, target: discord.Member) -> bool:
     return moderator.top_role > target.top_role
 
 class ModerationCommands(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, plugin: "ModerationPlugin"):
+        self.plugin = plugin
+        self.bot = plugin.bot
 
 # ---------------------------------------------------------------------
 
@@ -51,19 +52,10 @@ class ModerationCommands(commands.Cog):
     # Sends an embed to the moderation log channel, if one is configured and enabled.
     # Silently does nothing if logging is off or channel id is not configured.
     async def send_mod_log(self, action: str, moderator: discord.Member, target: discord.Member | discord.User, reason: str, extra: str | None = None):
-        enabled = await db.get_settings("mod_log_enabled", "true")
-        if enabled != "true":
+        if not await self.plugin.settings.get("log_enabled"):
             return
 
-        raw_channel_id = await db.get_settings("mod_log_channel_id", "0")
-        if raw_channel_id is None:
-            raw_channel_id = "0"
-
-        try:
-            channel_id = int(raw_channel_id)
-        except (TypeError, ValueError):
-            channel_id = 0
-
+        channel_id = await self.plugin.settings.get("log_channel_id")
         if not channel_id:
             return
 
@@ -273,5 +265,23 @@ class ModerationCommands(commands.Cog):
         else:
             await interaction.response.send_message(message, ephemeral=True)
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(ModerationCommands(bot))
+class ModerationPlugin(Plugin):
+    SETTINGS = (
+        PluginSetting(
+            "log_enabled",
+            SettingType.BOOL,
+            default=False,
+            label="Enable mod log",
+            description="Post an embed to the channel below for every moderation action.",
+        ),
+        PluginSetting(
+            "log_channel_id",
+            SettingType.CHANNEL,
+            default=0,
+            label="Mod log channel ID",
+            description="Where kick/ban/timeout/warn actions are logged. Leave 0 to disable.",
+        ),
+    )
+
+    async def setup(self):
+        await self.ctx.add_cog(ModerationCommands(self))

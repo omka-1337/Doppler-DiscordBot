@@ -20,7 +20,7 @@ MANIFEST_FILENAME = "plugin.json"
 
 # A plugin id doubles as its settings namespace, its import name and its
 # directory name, so it is restricted to a conservative slug.
-_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,31}$")
+_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 
 _REQUIRED_FIELDS = ("id", "name", "version", "api_version")
 
@@ -98,7 +98,7 @@ def parse_manifest(data: dict, path: Path | None = None) -> PluginManifest:
     plugin_id = data["id"]
     if not isinstance(plugin_id, str) or not _ID_PATTERN.match(plugin_id):
         raise PluginManifestError(
-            f"Invalid plugin id {plugin_id!r}: use 3-32 chars, lowercase letters, "
+            f"Invalid plugin id {plugin_id!r}: use 2-32 chars, lowercase letters, "
             "digits and underscores, starting with a letter."
         )
 

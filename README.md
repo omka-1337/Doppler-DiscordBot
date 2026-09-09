@@ -5,17 +5,17 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 ## Features
 
 - 🎵 **Music** — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
-- 🤖 **AI Chat** — conversational AI; pick a provider (Google Gemini, DeepSeek, or ChatGPT) from the dashboard, where the persona name, system prompt, language, tone, and provider API key are all configured.
+- 🤖 **AI Chat** *(plugin)* — conversational AI; pick a provider (Google Gemini, DeepSeek, or ChatGPT) from the dashboard, where the persona name, system prompt, language, tone, and provider API key are all configured.
 - 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Supports DeepL and Google (official API or a free keyless fallback).
 - 🔊 **Temporary Voice Channels** — joining a configured "hub" channel automatically creates a private voice channel for the user, with a rename button.
-- 🛡️ **Moderation** — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
-- 🛠️ **Rich Embed Builder** — build Discord messages visually in the dashboard using Components V2 (independent cards, each with its own accent color and ordered text/image blocks), then send them with `/embed <name>`. Images can be linked by URL or uploaded directly.
-- 🔒 **Server Protect** — optional raid/alt mitigation. Checks every new member's account age on join (DMs the reason and kicks if too new; grants a role automatically otherwise), and detects join bursts — react with an admin-gated alert or fully automatic lockdown (revokes invites, rejects new joins for a while).
+- 🛡️ **Moderation** *(plugin)* — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
+- 🛠️ **Rich Embed Builder** *(plugin)* — build Discord messages visually in the dashboard using Components V2 (independent cards, each with its own accent color and ordered text/image blocks), then send them with `/embed <name>`. Images can be linked by URL or uploaded directly.
+- 🔒 **Server Protect** *(plugin)* — optional raid/alt mitigation. Checks every new member's account age on join (DMs the reason and kicks if too new; grants a role automatically otherwise), and detects join bursts — react with an admin-gated alert or fully automatic lockdown (revokes invites, rejects new joins for a while).
 - 🧠 **Plugins** — features can ship as self-contained plugins that are enabled, configured and reloaded from the dashboard. Reloading a plugin applies its new code *without restarting the bot*.
 - 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), per-module enable/disable toggles, and settings management for every feature above.
 - 🔐 **Dashboard Login** (optional) — gate the dashboard behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It switches itself on once a home server is set and a Client Secret is saved in Settings — the Client ID is detected automatically, and the login page shows you the exact redirect URI to register (with a copy button and a direct link to your app's OAuth2 page).
 
-Every module can be toggled on/off independently from the dashboard's Modules tab, and every plugin from its Plugins tab.
+Anything marked *(plugin)* is enabled, configured and reloaded from the dashboard's **Plugins** tab; the rest are toggled from its **Modules** tab.
 
 ## Plugins
 

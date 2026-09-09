@@ -103,10 +103,43 @@ async def ensure_tables(db):
 # moved if the plugin hasn't already got a value there, so this is safe to run
 # on every startup and does nothing once the move has happened.
 LEGACY_SETTINGS_MOVES = [
+    # Translator
     ("Translator", "translator_provider", "translator", "provider"),
     ("Translator", "translator_deepl_api_key", "translator", "deepl_api_key"),
     ("Translator", "translator_google_api_key", "translator", "google_api_key"),
     ("Modules", "translator", "Plugins", "translator"),
+
+    # AI chat
+    ("AI", "ai_provider", "ai", "provider"),
+    ("AI", "ai_gemini_api_key", "ai", "gemini_api_key"),
+    ("AI", "ai_deepseek_api_key", "ai", "deepseek_api_key"),
+    ("AI", "ai_chatgpt_api_key", "ai", "chatgpt_api_key"),
+    ("AI", "ai_bot_name", "ai", "bot_name"),
+    ("AI", "ai_system_prompt", "ai", "system_prompt"),
+    ("AI", "ai_force_language", "ai", "force_language"),
+    ("AI", "ai_language", "ai", "language"),
+    ("AI", "ai_irony", "ai", "irony"),
+    ("AI", "ai_seriousness", "ai", "seriousness"),
+    ("AI", "ai_enabled", "Plugins", "ai"),
+    # Never read by any code path -- carried over so it stops lingering in the table.
+    ("Modules", "ai_features", "Plugins", "ai"),
+
+    # Moderation
+    ("Moderation", "mod_log_enabled", "moderation", "log_enabled"),
+    ("Moderation", "mod_log_channel_id", "moderation", "log_channel_id"),
+    ("Modules", "moderation", "Plugins", "moderation"),
+
+    # Server Protect (keys keep their names; only the namespace changes)
+    ("ServerProtect", "min_account_age_days", "serverprotect", "min_account_age_days"),
+    ("ServerProtect", "verified_role_id", "serverprotect", "verified_role_id"),
+    ("ServerProtect", "raid_mode", "serverprotect", "raid_mode"),
+    ("ServerProtect", "raid_join_threshold", "serverprotect", "raid_join_threshold"),
+    ("ServerProtect", "raid_join_window_seconds", "serverprotect", "raid_join_window_seconds"),
+    ("ServerProtect", "raid_alert_channel_id", "serverprotect", "raid_alert_channel_id"),
+    ("ServerProtect", "raid_lockdown_duration_minutes", "serverprotect", "raid_lockdown_duration_minutes"),
+    ("ServerProtect", "raid_lockdown_active", "serverprotect", "raid_lockdown_active"),
+    ("ServerProtect", "raid_lockdown_started_at", "serverprotect", "raid_lockdown_started_at"),
+    ("Modules", "server_protect", "Plugins", "serverprotect"),
 ]
 
 
@@ -146,47 +179,14 @@ async def init_db():
             # MAIN
             ("prefix", "+", "Main"),
 
-            # AI
-            ("ai_bot_name", "Kara AI", "AI"),
-            ("ai_system_prompt", "You're a moderator on Discord. Be polite and helpful.", "AI"),
-            ("ai_language", "English", "AI"),
-            ("ai_irony", "0.2", "AI"),
-            ("ai_seriousness", "0.8", "AI"),
-            ("ai_force_language", "true", "AI"),
-            ("ai_provider", "gemini", "AI"),
-            ("ai_gemini_api_key", "", "AI"),
-            ("ai_deepseek_api_key", "", "AI"),
-            ("ai_chatgpt_api_key", "", "AI"),
-
             # VOICEMANAGER
             ("category_id", "0", "Voice"),
             ("main_voice_channel_id", "0", "Voice"),
             ("voice_channel_name_prefix", "🏠║", "Voice"),
 
-            # MODERATION
-            ("mod_log_channel_id", "0", "Moderation"),
-            ("mod_log_enabled", "false", "Moderation"),
-
-            # SERVER PROTECT
-            ("min_account_age_days", "7", "ServerProtect"),
-            ("verified_role_id", "0", "ServerProtect"),
-            # Raid protection: "alert" posts a warning + admin-only button; "auto" locks down by itself.
-            ("raid_mode", "alert", "ServerProtect"),
-            ("raid_join_threshold", "5", "ServerProtect"),
-            ("raid_join_window_seconds", "10", "ServerProtect"),
-            ("raid_alert_channel_id", "0", "ServerProtect"),
-            ("raid_lockdown_duration_minutes", "15", "ServerProtect"),
-            # Runtime state, not a user-facing setting: whether lockdown is currently active.
-            ("raid_lockdown_active", "false", "ServerProtect"),
-            ("raid_lockdown_started_at", "", "ServerProtect"),
-
             # MODULES
-            ("ai_features", "true", "Modules"),
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
-            ("moderation", "true", "Modules"),
-            # Off by default: needs DISCORD_CLIENT_ID/SECRET + DASHBOARD_URL configured first.
-            ("server_protect", "false", "Modules"),
 
             # MUSIC BOTS
             ("music_bot_id", "", "Music")

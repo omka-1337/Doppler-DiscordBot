@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord.ext import commands
 
-from dopplerbot.database import get_settings_by_category, set_settings
+from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
 
 # How long to wait before posting another raid alert/auto-lockdown notice,
 # so a sustained burst of joins doesn't spam a new message on every single join.
@@ -57,26 +57,27 @@ class ServerProtect(commands.Cog):
       admin-gated alert or a fully automatic lockdown, depending on raid_mode.
     """
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, plugin: "ServerProtectPlugin"):
+        self.plugin = plugin
+        self.bot = plugin.bot
+        self.settings = plugin.settings
         self._recent_joins: deque[float] = deque()
         self._last_raid_alert_at: float = 0.0
-        bot.add_view(RaidLockdownView())
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         if member.bot:
             return
 
-        settings = await get_settings_by_category("ServerProtect")
+        settings = await self.settings.all()
         guild = member.guild
 
         # --- raid burst detection ---
         now = time.monotonic()
         self._recent_joins.append(now)
 
-        window = float(settings.get("raid_join_window_seconds", "10") or "10")
-        threshold = int(settings.get("raid_join_threshold", "5") or "5")
+        window = settings["raid_join_window_seconds"]
+        threshold = settings["raid_join_threshold"]
 
         while self._recent_joins and now - self._recent_joins[0] > window:
             self._recent_joins.popleft()
@@ -87,8 +88,8 @@ class ServerProtect(commands.Cog):
             if now - self._last_raid_alert_at > RAID_ALERT_COOLDOWN_SECONDS:
                 self._last_raid_alert_at = now
                 await self._handle_raid_detected(guild, settings)
-                settings = await get_settings_by_category("ServerProtect")
-                lockdown_active = settings.get("raid_lockdown_active", "false") == "true"
+                settings = await self.settings.all()
+                lockdown_active = settings["raid_lockdown_active"]
 
         if lockdown_active:
             await self._reject_member(
@@ -98,7 +99,7 @@ class ServerProtect(commands.Cog):
             return
 
         # --- account age check ---
-        min_age_days = int(settings.get("min_account_age_days", "7") or "0")
+        min_age_days = settings["min_account_age_days"]
         account_created = discord.utils.snowflake_time(member.id)
         age_days = (datetime.now(timezone.utc) - account_created).days
 
@@ -110,7 +111,7 @@ class ServerProtect(commands.Cog):
             )
             return
 
-        role_id = int(settings.get("verified_role_id", "0") or "0")
+        role_id = settings["verified_role_id"]
         if role_id:
             role = guild.get_role(role_id)
             if role is None:
@@ -140,11 +141,11 @@ class ServerProtect(commands.Cog):
     # Lazily clears an expired lockdown (no background task needed — checked on
     # every join, and self-heals across restarts since the state is persisted).
     async def _is_lockdown_active(self, settings: dict) -> bool:
-        if settings.get("raid_lockdown_active", "false") != "true":
+        if not settings["raid_lockdown_active"]:
             return False
 
-        duration_minutes = int(settings.get("raid_lockdown_duration_minutes", "15") or "15")
-        started_raw = settings.get("raid_lockdown_started_at", "")
+        duration_minutes = settings["raid_lockdown_duration_minutes"]
+        started_raw = settings["raid_lockdown_started_at"]
 
         expired = True
         if started_raw:
@@ -155,7 +156,7 @@ class ServerProtect(commands.Cog):
                 expired = True
 
         if expired:
-            await set_settings("raid_lockdown_active", "false", "ServerProtect")
+            await self.settings.set("raid_lockdown_active", False)
             return False
 
         return True
@@ -163,8 +164,8 @@ class ServerProtect(commands.Cog):
     # ---------------------------------------------------------------------
 
     async def activate_lockdown(self, guild: discord.Guild):
-        await set_settings("raid_lockdown_active", "true", "ServerProtect")
-        await set_settings("raid_lockdown_started_at", datetime.now(timezone.utc).isoformat(), "ServerProtect")
+        await self.settings.set("raid_lockdown_active", True)
+        await self.settings.set("raid_lockdown_started_at", datetime.now(timezone.utc).isoformat())
 
         try:
             for invite in await guild.invites():
@@ -178,13 +179,8 @@ class ServerProtect(commands.Cog):
     # ---------------------------------------------------------------------
 
     async def _handle_raid_detected(self, guild: discord.Guild, settings: dict):
-        mode = settings.get("raid_mode", "alert")
-
-        raw_channel_id = settings.get("raid_alert_channel_id", "0")
-        try:
-            channel_id = int(raw_channel_id)
-        except (TypeError, ValueError):
-            channel_id = 0
+        mode = settings["raid_mode"]
+        channel_id = settings["raid_alert_channel_id"]
 
         channel = guild.get_channel(channel_id) if channel_id else None
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):
@@ -214,5 +210,68 @@ class ServerProtect(commands.Cog):
             logging.warning("Server Protect: no permission to post the raid alert.")
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(ServerProtect(bot))
+class ServerProtectPlugin(Plugin):
+    SETTINGS = (
+        PluginSetting(
+            "min_account_age_days",
+            SettingType.INT,
+            default=7,
+            label="Minimum account age (days)",
+            description="New members with a younger account are DM'd the reason and kicked.",
+            min=0,
+        ),
+        PluginSetting(
+            "verified_role_id",
+            SettingType.ROLE,
+            default=0,
+            label="Verified role ID",
+            description="Granted automatically to members who pass the age check. 0 to skip.",
+        ),
+        PluginSetting(
+            "raid_mode",
+            SettingType.SELECT,
+            default="alert",
+            label="Raid response mode",
+            description="Alert posts a warning with an admin-only lockdown button; Auto locks down by itself.",
+            choices=(("alert", "🔔 Alert only (admin confirms)"), ("auto", "🤖 Full autonomy (auto-lockdown)")),
+        ),
+        PluginSetting(
+            "raid_join_threshold",
+            SettingType.INT,
+            default=5,
+            label="Join threshold",
+            description="Joins within the window below that count as a raid.",
+            min=2,
+        ),
+        PluginSetting(
+            "raid_join_window_seconds",
+            SettingType.INT,
+            default=10,
+            label="Time window (seconds)",
+            min=1,
+        ),
+        PluginSetting(
+            "raid_alert_channel_id",
+            SettingType.CHANNEL,
+            default=0,
+            label="Alert/log channel ID",
+            description="Raid alerts and lockdown notices are posted here.",
+        ),
+        PluginSetting(
+            "raid_lockdown_duration_minutes",
+            SettingType.INT,
+            default=15,
+            label="Lockdown duration (minutes)",
+            min=1,
+        ),
+        # Runtime state rather than configuration: persisted so a lockdown
+        # survives a restart and still expires on schedule.
+        PluginSetting("raid_lockdown_active", SettingType.BOOL, default=False, hidden=True),
+        PluginSetting("raid_lockdown_started_at", SettingType.STRING, default="", hidden=True),
+    )
+
+    async def setup(self):
+        # Registered through the context so a reload doesn't leave a dead
+        # listener behind on the old view.
+        self.ctx.add_view(RaidLockdownView())
+        await self.ctx.add_cog(ServerProtect(self))

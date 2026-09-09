@@ -211,6 +211,16 @@ class PluginContext:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    @property
+    def savedata_dir(self) -> Path:
+        """The bot's shared data directory.
+
+        Only for data a plugin has to share with the dashboard -- the embed
+        plugin reads the templates the panel's builder writes, for instance.
+        Anything private to the plugin belongs in ``data_dir``.
+        """
+        return SAVEDATA_DIR
+
     async def add_cog(self, cog: "commands.Cog"):
         """Register a cog and remember it, so unload can take it back out."""
         await self.bot.add_cog(cog)
@@ -233,7 +243,15 @@ class PluginContext:
         for view in self._views:
             try:
                 view.stop()
-                self.bot.remove_view(view)
+                # discord.py exposes Client.add_view but no public counterpart,
+                # so the persistent-view store has to be reached directly. If a
+                # future version moves it, unloading still succeeds -- the view
+                # is stopped either way, it just stays registered until restart.
+                store = getattr(getattr(self.bot, "_connection", None), "_view_store", None)
+                if store is None:
+                    self.log.warning("Cannot unregister persistent views on this discord.py version.")
+                else:
+                    store.remove_view(view)
             except Exception:
                 self.log.exception("Failed to remove a persistent view")
         self._views.clear()

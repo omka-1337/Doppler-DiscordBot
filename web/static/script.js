@@ -390,18 +390,6 @@ async function saveSettings(event, category) {
         settingsPayload.settings[key] = value;
     });
 
-    // Explicitly set boolean toggle states for specific module categories
-    if (category === 'AI') {
-        const aiChk = document.getElementById('chk_ai_enabled');
-        const forceLangChk = document.getElementById('chk_ai_force_language');
-        if (forceLangChk) settingsPayload.settings['ai_force_language'] = forceLangChk.checked ? 'true' : 'false';
-    }
-
-    if (category === 'Moderation') {
-        const modLogChk = document.getElementById('chk_mod_log_enabled');
-        if (modLogChk) settingsPayload.settings['mod_log_enabled'] = modLogChk.checked ? 'true' : 'false';
-    }
-
     try {
         const res = await fetch('/api/save-settings', {
             method: 'POST',
@@ -528,22 +516,6 @@ async function saveYouTubeOAuthToken() {
 }
 
 // ---------------------------------------------------------------------
-
-// Call the function as soon as the page loads
-// Show only the API key field relevant to the currently selected AI provider
-function toggleAiProviderFields() {
-    const select = document.getElementById('set_ai_provider');
-    const blocks = {
-        gemini: document.getElementById('ai-gemini-key-block'),
-        deepseek: document.getElementById('ai-deepseek-key-block'),
-        chatgpt: document.getElementById('ai-chatgpt-key-block'),
-    };
-    if (!select || !blocks.gemini || !blocks.deepseek || !blocks.chatgpt) return;
-
-    Object.entries(blocks).forEach(([provider, block]) => {
-        block.classList.toggle('hidden', select.value !== provider);
-    });
-}
 
 // ---------------------------------------------------------------------
 // DASHBOARD STATS (uptime / CPU / RAM)

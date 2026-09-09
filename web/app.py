@@ -185,11 +185,8 @@ async def get_dashboard(request: Request):
     bot_info = await get_bot_info()
 
     settings_main = await get_settings_by_category("Main")
-    settings_ai = await get_settings_by_category("AI")
     settings_voice = await get_settings_by_category("Voice")
     settings_modules = await get_settings_by_category("Modules")
-    settings_moderation = await get_settings_by_category("Moderation")
-    settings_serverprotect = await get_settings_by_category("ServerProtect")
 
     t = get_translations("en")
 
@@ -200,11 +197,8 @@ async def get_dashboard(request: Request):
             "t": t,
             "bot": bot_info,
             "settings_main": settings_main,
-            "settings_ai": settings_ai,
             "settings_voice": settings_voice,
             "settings_modules": settings_modules,
-            "settings_moderation": settings_moderation,
-            "settings_serverprotect": settings_serverprotect,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
             "logged_in_username": request.session.get("username", ""),
@@ -320,11 +314,8 @@ async def save_settings(request: Request):
 # ---------------------------------------------------------------------
 
 MODULE_TOGGLE_MAP = {
-    "ai": ("dopplerbot.cogs.ai.AiChat", "AI", "ai_enabled"),
     "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
     "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
-    "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
-    "serverprotect": ("dopplerbot.cogs.serverprotect.ServerProtect", "Modules", "server_protect"),
 }
 
 class ModuleTogglePayload(BaseModel):

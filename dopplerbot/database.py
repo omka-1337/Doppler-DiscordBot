@@ -202,12 +202,37 @@ async def migrate_legacy_tables(db):
         await db.execute("ATTACH DATABASE ? AS plugin_db", (str(target_dir / "data.db"),))
         try:
             await db.execute(create_sql)
+
+            # If the plugin already holds rows, two versions of this data exist
+            # and picking one silently could throw away the operator's. Leave
+            # both in place and say so instead.
+            async with db.execute(f'SELECT COUNT(*) FROM plugin_db."{table}"') as cursor:
+                existing = (await cursor.fetchone())[0]
+            if existing:
+                await db.commit()
+                logging.warning(
+                    f"Not moving {table!r}: the {plugin_id!r} plugin's database already has "
+                    f"{existing} row(s). The copy in bot.db was left untouched -- delete "
+                    f"whichever is stale."
+                )
+                continue
+
             await db.execute(f'INSERT INTO plugin_db."{table}" SELECT * FROM main."{table}"')
             await db.execute(f'DROP TABLE main."{table}"')
             await db.commit()
             logging.info(f"Moved the {table!r} table into the {plugin_id!r} plugin's database.")
+        except Exception:
+            # A failed migration must not stop the bot from booting: roll back so
+            # the source table survives untouched and the move can be retried.
+            await db.rollback()
+            logging.exception(f"Failed to move the {table!r} table; leaving it in bot.db.")
         finally:
-            await db.execute("DETACH DATABASE plugin_db")
+            # DETACH refuses to run inside a transaction, so this has to come
+            # after the commit or rollback above.
+            try:
+                await db.execute("DETACH DATABASE plugin_db")
+            except Exception:
+                logging.exception("Failed to detach the plugin database.")
 
 
 async def migrate_legacy_settings(db):

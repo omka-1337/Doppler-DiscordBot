@@ -32,6 +32,15 @@ features of its own and assembles them from a plugin source.
   application, the secret by performing a client-credentials grant — and saving
   re-checks them server-side rather than trusting the browser.
 
+### Removed
+
+- The `cogs/` package is gone. `cogmanager` managed the old module system and
+  no longer worked against anything that exists; the `/web` command handed out
+  the dashboard's address, which you must already have visited to configure the
+  bot at all. With both gone the bot loads nothing but plugins.
+- `DASHBOARD_URL` and `WEB_PORT` went with the `/web` command — nothing else
+  read them.
+
 ### Broker
 
 - A separate `broker` container is the only component with access to the Docker

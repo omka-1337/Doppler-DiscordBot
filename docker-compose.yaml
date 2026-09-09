@@ -9,8 +9,6 @@ services:
     # appear here.
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      - DASHBOARD_URL=${DASHBOARD_URL:-}
-      - WEB_PORT=${WEB_PORT:-8000}
       # Seeded into the music plugin's own settings on first run. Not withheld,
       # because the plugin needs them and therefore has them either way.
       - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-}

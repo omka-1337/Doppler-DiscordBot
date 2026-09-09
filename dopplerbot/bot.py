@@ -4,7 +4,6 @@ import httpx
 import os
 import logging
 import math
-import traceback
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
@@ -16,11 +15,6 @@ from dopplerbot.plugins import PluginRegistry
 load_dotenv()
 
 STARTED_AT = datetime.now(timezone.utc)
-
-COG_EXTENSIONS = [
-    "dopplerbot.cogs.cogmanager",
-    "dopplerbot.cogs.web_command",
-]
 
 # LOGGING
 logging.basicConfig(
@@ -64,8 +58,7 @@ bot = commands.Bot(
     intents=intents
 )
 
-# Every feature is a plugin now; COG_EXTENSIONS holds only the bot's own
-# infrastructure, which is not optional and has nothing to configure.
+# Everything the bot does comes from plugins; this process only hosts them.
 bot.plugins = PluginRegistry(bot)
 
 # ---------------------------------------------------------------------
@@ -453,17 +446,6 @@ async def start_internal_api():
 
 # ---------------------------------------------------------------------
 
-# COGS LOAD
-async def load_cogs(bot):
-    logging.info("Start loading the cogs...")
-
-    for cog_name in COG_EXTENSIONS:
-        try:
-            await bot.load_extension(cog_name)
-            logging.info(f"Loaded: {cog_name}")
-        except Exception as e:
-            logging.error(f"Error in {cog_name}:\n{traceback.format_exc()}")
-
 # ---------------------------------------------------------------------
 
 # PROVIDER KEYS
@@ -620,7 +602,6 @@ async def main():
             return
 
         async with bot:
-            await load_cogs(bot)
             await bot.plugins.load_all()
             await bot.start(token)
 

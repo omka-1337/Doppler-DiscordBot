@@ -1005,6 +1005,26 @@ function renderPluginField(pluginId, field, value) {
     return `<div>${label}${input}${hint}</div>`;
 }
 
+// Which cards are open. Kept across re-renders so toggling or reloading a
+// plugin doesn't collapse everything the user had expanded.
+const expandedPlugins = new Set();
+
+function togglePluginCard(pluginId) {
+    const body = document.getElementById(`plugin-body-${pluginId}`);
+    if (!body) return;
+
+    const opening = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !opening);
+    if (opening) {
+        expandedPlugins.add(pluginId);
+    } else {
+        expandedPlugins.delete(pluginId);
+    }
+
+    const chevron = document.getElementById(`plugin-chevron-${pluginId}`);
+    if (chevron) chevron.classList.toggle('rotate-90', opening);
+}
+
 function renderPluginCard(plugin) {
     const values = plugin.values || {};
     const statusText = plugin.running
@@ -1013,8 +1033,10 @@ function renderPluginCard(plugin) {
             ? '<span class="text-[10px] text-red-400 font-semibold">● FAILED</span>'
             : '<span class="text-[10px] text-gray-500 font-semibold">● DISABLED</span>');
 
+    // Shown outside the collapsible body: a plugin that failed to load should
+    // say so without the user having to open it first.
     const error = plugin.error
-        ? `<p class="text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2 font-mono">${escapeHtml(plugin.error)}</p>`
+        ? `<p class="text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2 font-mono mx-5 mb-4">${escapeHtml(plugin.error)}</p>`
         : '';
 
     // Settings are only readable while the plugin is running, since the schema
@@ -1023,8 +1045,26 @@ function renderPluginCard(plugin) {
         .map(f => renderPluginField(plugin.id, f, values[f.key]))
         .join('');
 
-    const form = plugin.running && fields
-        ? `<div class="space-y-4 pt-4 mt-4 border-t border-[#3f4147]">
+    const expandable = plugin.running && fields;
+    const isOpen = expandable && expandedPlugins.has(plugin.id);
+
+    const chevron = expandable
+        ? `<span id="plugin-chevron-${plugin.id}"
+               class="text-gray-500 text-xs mt-1.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}">▶</span>`
+        : '<span class="w-2"></span>';
+
+    // A plugin with nothing to configure shouldn't look clickable.
+    const hint = plugin.running && !fields
+        ? '<span class="text-[10px] text-gray-600">· no settings</span>'
+        : '';
+
+    const header = expandable
+        ? `class="flex items-start justify-between gap-4 p-5 cursor-pointer hover:bg-[#313338] transition rounded-lg"
+           onclick="togglePluginCard('${plugin.id}')"`
+        : 'class="flex items-start justify-between gap-4 p-5"';
+
+    const body = expandable
+        ? `<div id="plugin-body-${plugin.id}" class="${isOpen ? '' : 'hidden'} px-5 pb-5 space-y-4 border-t border-[#3f4147] pt-4">
                ${fields}
                <button onclick="savePluginSettings('${plugin.id}')"
                    class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm">
@@ -1034,9 +1074,10 @@ function renderPluginCard(plugin) {
         : '';
 
     return `
-    <div class="bg-[#2b2d31] p-5 rounded-lg border border-[#3f4147] shadow-lg">
-        <div class="flex items-start justify-between gap-4">
+    <div class="bg-[#2b2d31] rounded-lg border border-[#3f4147] shadow-lg">
+        <div ${header}>
             <div class="flex items-start gap-3">
+                ${chevron}
                 <span class="text-2xl leading-none">${escapeHtml(plugin.icon)}</span>
                 <div>
                     <h3 class="text-white font-bold flex items-center gap-2">
@@ -1046,11 +1087,13 @@ function renderPluginCard(plugin) {
                     </h3>
                     <p class="text-xs text-gray-400 mt-1">${escapeHtml(plugin.description)}</p>
                     <p class="text-[10px] text-gray-500 mt-1 font-mono">
-                        ${escapeHtml(plugin.id)}${plugin.author ? ' · ' + escapeHtml(plugin.author) : ''} · ${escapeHtml(plugin.installed_from)}
+                        ${escapeHtml(plugin.id)}${plugin.author ? ' · ' + escapeHtml(plugin.author) : ''} · ${escapeHtml(plugin.installed_from)} ${hint}
                     </p>
                 </div>
             </div>
-            <div class="flex items-center gap-3 shrink-0">
+            <!-- The controls sit inside the clickable header, so their clicks
+                 must not also open or close the card. -->
+            <div class="flex items-center gap-3 shrink-0" onclick="event.stopPropagation()">
                 <button onclick="reloadPlugin('${plugin.id}')" title="Reload this plugin's code without restarting the bot"
                     class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 px-3 py-1.5 rounded transition text-xs font-semibold">
                     ♻️ Reload
@@ -1063,7 +1106,7 @@ function renderPluginCard(plugin) {
             </div>
         </div>
         ${error}
-        ${form}
+        ${body}
     </div>`;
 }
 

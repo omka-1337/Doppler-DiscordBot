@@ -1,0 +1,12 @@
+{
+  "id": "translator",
+  "name": "Message Translation",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "description": "Right-click any message -> Apps -> Translate. Supports DeepL and Google (official API or a free keyless fallback).",
+  "author": "Doppler",
+  "icon": "🌐",
+  "entrypoint": "plugin.py",
+  "requirements": ["deepl", "google-cloud-translate", "deep-translator"],
+  "default_enabled": true
+}

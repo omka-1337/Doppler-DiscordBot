@@ -3,11 +3,26 @@ services:
     build: .
     container_name: doppler_discord_bot
     restart: unless-stopped
+    # Plugin code runs in this process and can read anything the process can,
+    # so this container is given only what the bot itself needs. The session
+    # secret and the OAuth client secret are the dashboard's business and never
+    # appear here.
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DASHBOARD_URL=${DASHBOARD_URL:-}
+      - WEB_PORT=${WEB_PORT:-8000}
+      # Seeded into the music plugin's own settings on first run. Not withheld,
+      # because the plugin needs them and therefore has them either way.
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-}
+      - LAVALINK_URI=${LAVALINK_URI:-}
+      - YOUTUBE_OAUTH_REFRESH_TOKEN=${YOUTUBE_OAUTH_REFRESH_TOKEN:-}
     volumes:
       - .:/app
-      # Plugin code runs in this container, so the two directories that decide
-      # what is trusted and what gets loaded are mounted read-only here. Only
-      # the broker may change them.
+      # .env is mounted over with an empty file: the project bind mount would
+      # otherwise hand every secret in it to any installed plugin.
+      - /dev/null:/app/.env:ro
+      # The two directories that decide what is trusted and what gets loaded.
+      # Only the broker may write them.
       - ./config:/app/config:ro
       - ./plugins:/app/plugins:ro
     depends_on:

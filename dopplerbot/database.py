@@ -80,6 +80,13 @@ async def ensure_tables(db):
 # moved if the plugin hasn't already got a value there, so this is safe to run
 # on every startup and does nothing once the move has happened.
 LEGACY_SETTINGS_MOVES = [
+    # AI credentials, which briefly lived in the ai plugin's namespace. They are
+    # the bot's now: a plugin asks for a completion instead of holding a key.
+    ("ai", "provider", "AI", "provider"),
+    ("ai", "gemini_api_key", "AI", "gemini_api_key"),
+    ("ai", "deepseek_api_key", "AI", "deepseek_api_key"),
+    ("ai", "chatgpt_api_key", "AI", "chatgpt_api_key"),
+
     # Translator
     ("Translator", "translator_provider", "translator", "provider"),
     ("Translator", "translator_deepl_api_key", "translator", "deepl_api_key"),
@@ -151,6 +158,7 @@ LEGACY_ENV_SEEDS = [
     ("LAVALINK_PASSWORD", "music", "lavalink_password"),
     ("LAVALINK_URI", "music", "lavalink_uri"),
     ("YOUTUBE_OAUTH_REFRESH_TOKEN", "music", "youtube_oauth_refresh_token"),
+    ("GEMINI_API_KEY", "AI", "gemini_api_key"),
 ]
 
 
@@ -159,11 +167,15 @@ async def seed_settings_from_env(db):
         value = os.getenv(env_var)
         if not value:
             continue
+        # Fill in a value that is missing *or* still blank: a placeholder row
+        # created by a default should not shadow a real key sitting in .env.
         await db.execute(
             """
             INSERT INTO settings (category, key, value)
             VALUES (?, ?, ?)
-            ON CONFLICT(category, key) DO NOTHING
+            ON CONFLICT(category, key) DO UPDATE SET
+                value = excluded.value
+            WHERE settings.value = ''
             """,
             (plugin_id, key, value),
         )
@@ -268,6 +280,12 @@ async def init_db():
         default_settings = [
             # MAIN
             ("prefix", "+", "Main"),
+
+            # AI credentials, owned by the bot rather than by any plugin.
+            ("provider", "gemini", "AI"),
+            ("gemini_api_key", "", "AI"),
+            ("deepseek_api_key", "", "AI"),
+            ("chatgpt_api_key", "", "AI"),
 
             # MODULES
 

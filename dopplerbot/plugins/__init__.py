@@ -5,6 +5,7 @@ Plugins import from :mod:`dopplerbot.plugins.api`; the bot uses
 """
 
 from dopplerbot.plugins.api import (
+    AIError,
     Plugin,
     PluginContext,
     PluginSetting,
@@ -24,6 +25,7 @@ from dopplerbot.plugins.manifest import (
 )
 
 __all__ = [
+    "AIError",
     "Plugin",
     "PluginContext",
     "PluginSetting",

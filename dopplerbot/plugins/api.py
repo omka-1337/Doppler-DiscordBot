@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Sequence
 import discord
 import httpx
 
+from dopplerbot import ai as core_ai
+from dopplerbot.ai import AIError  # re-exported for plugins
 from dopplerbot.database import SAVEDATA_DIR, get_settings, get_settings_by_category, set_settings
 from dopplerbot.plugins.db import PluginDatabase
 from dopplerbot.plugins.manifest import PluginManifest, ServiceSpec
@@ -294,6 +296,26 @@ class ServiceManager:
         return response.json()["stopped"]
 
 
+class AIAccess:
+    """A plugin's route to text generation.
+
+    The provider and its API key are the bot's settings, not the plugin's, so
+    the plugin passes a prompt and receives text. It has no way to read the key
+    through this object, and no reason to know which service answered.
+    """
+
+    def __init__(self, log: logging.Logger):
+        self._log = log
+
+    async def complete(self, system_prompt: str, prompt: str) -> str:
+        """Generate a reply. Raises AIError if nothing is configured."""
+        return await core_ai.complete(system_prompt, prompt)
+
+    async def is_configured(self) -> bool:
+        """Whether an API key is set, so a plugin can fail politely."""
+        return await core_ai.is_configured()
+
+
 class PluginContext:
     """Everything a plugin is handed at load time."""
 
@@ -304,6 +326,7 @@ class PluginContext:
         self.log = logging.getLogger(f"plugin.{manifest.id}")
         self.settings = ScopedSettings(manifest.id, schema)
         self.services = ServiceManager(manifest, self.settings, self.log)
+        self.ai = AIAccess(self.log)
         self._db: PluginDatabase | None = None
         # Registrations tracked so unloading a plugin really removes it -- this
         # is what makes reloading a plugin without restarting the bot work.

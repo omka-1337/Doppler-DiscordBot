@@ -5,7 +5,7 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 ## Features
 
 - 🎵 **Music** *(plugin)* — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
-- 🤖 **AI Chat** *(plugin)* — conversational AI; pick a provider (Google Gemini, DeepSeek, or ChatGPT) from the dashboard, where the persona name, system prompt, language, tone, and provider API key are all configured.
+- 🤖 **AI Chat** *(plugin)* — conversational AI; the persona name, system prompt, language and tone are the plugin's settings, while the provider (Google Gemini, DeepSeek, or ChatGPT) and its API key belong to the bot under **Settings → AI Provider**.
 - 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Supports DeepL and Google (official API or a free keyless fallback).
 - 🔊 **Temporary Voice Channels** *(plugin)* — joining a configured "hub" channel automatically creates a private voice channel for the user, with buttons to rename it, set a user limit, change the bitrate, lock it and allow specific people in.
 - 🛡️ **Moderation** *(plugin)* — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
@@ -49,6 +49,23 @@ A plugin declares its settings in code and the dashboard generates the form from
 That last point is a namespace boundary, not a sandbox — a plugin is Python running in the bot's own process. **Installing a third-party plugin means running third-party code**, so only install plugins you trust.
 
 Cogs and persistent views registered through `self.ctx` are removed automatically when the plugin is unloaded, which is what makes the dashboard's **Reload** button able to swap a plugin's code in place while the bot stays connected.
+
+### Text generation
+
+The AI provider and its API key are the bot's settings, not any plugin's. A
+plugin asks for a completion:
+
+```python
+reply = await self.ctx.ai.complete(system_prompt, prompt)
+```
+
+and gets text back. It never learns the key, and does not know which service
+answered — so one configured provider serves every plugin, and a plugin cannot
+leak a credential it was never given (by logging its own settings, say).
+
+Like the namespace boundary, this is a layer rather than a wall: plugin code
+runs in the bot's process and could still go looking. It removes the *accident*,
+not the *attack*.
 
 ### Sources and trust
 

@@ -182,6 +182,7 @@ async def get_dashboard(request: Request):
     bot_info = await get_bot_info()
 
     settings_main = await get_settings_by_category("Main")
+    settings_ai = await get_settings_by_category("AI")
     settings_modules = await get_settings_by_category("Modules")
 
     t = get_translations("en")
@@ -193,6 +194,7 @@ async def get_dashboard(request: Request):
             "t": t,
             "bot": bot_info,
             "settings_main": settings_main,
+            "settings_ai": settings_ai,
             "settings_modules": settings_modules,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),

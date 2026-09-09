@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
-from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, close_db, get_music_bot
+from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, close_db
 from dopplerbot.plugins import PluginRegistry
 
 load_dotenv()
@@ -19,14 +19,11 @@ COG_EXTENSIONS = [
     "dopplerbot.cogs.cogmanager",
     "dopplerbot.cogs.web_command",
     "dopplerbot.cogs.voice.VoiceManager",
-    "dopplerbot.cogs.music.MusicBotsManager",
-    "dopplerbot.cogs.music.MusicCommands",
 ]
 
 # Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
 MODULE_CONFIG = {
     "dopplerbot.cogs.voice.VoiceManager": ("Voice", "voice_enabled"),
-    "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
 }
 
 # LOGGING
@@ -89,42 +86,98 @@ async def handle_reload_cog(request):
 
 # ---------------------------------------------------------------------
 
-# TOGGLE MUSIC BOTS FROM WEB-PANEL
-async def handle_toggle_music_bot(request):
+# MUSIC WORKER BOTS FROM WEB-PANEL
+# The worker accounts live in the music plugin's own database, so the dashboard
+# cannot read or write them directly -- every change comes through here, which
+# updates the row and starts or stops the matching worker in one step.
+def _music():
+    """The running music plugin and its manager cog, or (None, None)."""
+    entry = bot.plugins.loaded.get("music")
+    if entry is None:
+        return None, None
+    return entry.instance, bot.get_cog("MusicBotsManager")
+
+
+def _music_unavailable():
+    return web.json_response(
+        {"status": "error", "message": "Music plugin is not running"}, status=503
+    )
+
+
+async def handle_music_list(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+    return web.json_response({"status": "ok", "bots": [list(row) for row in await plugin.store.all()]})
+
+
+async def handle_music_add(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+    return web.json_response({"status": "ok", "bot_rowid": await plugin.store.add()})
+
+
+async def handle_music_remove(request):
+    plugin, cog = _music()
+    if plugin is None:
+        return _music_unavailable()
+
     data = await request.json()
     bot_rowid = data.get("bot_rowid")
-    action = data.get("action")
 
-    logging.info(f"Registered cogs: {list(bot.cogs.keys())}")
-    cog = bot.get_cog("MusicBotsManager")
+    if cog is not None:
+        await cog.stop_music_bot(bot_rowid)
+    await plugin.store.remove(bot_rowid)
+    return web.json_response({"status": "ok"})
+
+
+async def handle_music_save_token(request):
+    plugin, cog = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    data = await request.json()
+    bot_rowid = data.get("bot_rowid")
+    token = data.get("bot_token", "")
+
+    await plugin.store.update(bot_rowid, bot_token=token)
+
+    # Restart the worker so it picks up the new token immediately.
+    if cog is not None:
+        await cog.stop_music_bot(bot_rowid)
+        if token:
+            await cog.start_single_bot(bot_rowid, token)
+    return web.json_response({"status": "ok"})
+
+
+async def handle_music_set_active(request):
+    plugin, cog = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    data = await request.json()
+    bot_rowid = data.get("bot_rowid")
+    is_active = bool(data.get("is_active"))
+
+    await plugin.store.update(bot_rowid, bot_status=int(is_active))
 
     if cog is None:
-        return web.json_response({"status": "error", "message": "Music module not loaded"}, status = 400)
-
-    try:
-        if action == "start":
-            bot_data = await get_music_bot(bot_rowid)
-
-            if bot_data is None:
-                return web.json_response({"status": "error", "message": f"Bot with ID {bot_rowid} not found in database",}, status=404,)
-                
-            _, bot_token, _, _ = bot_data
-
-            if not bot_token:
-                return web.json_response({"status": "error", "message": f"Bot {bot_rowid} has no token specified",}, status=400,)
-
-            # pyrefly: ignore [missing-attribute]
-            await cog.start_single_bot(bot_rowid, bot_token)
-
-        elif action == "stop":
-            # pyrefly: ignore [missing-attribute]
-            await cog.stop_music_bot(bot_rowid)
-
         return web.json_response({"status": "ok"})
-    except Exception as e:
-        
-        logging.error(f"Error toggiling music bot {bot_rowid}: {e}")
-        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+    if is_active:
+        row = await plugin.store.get(bot_rowid)
+        if row is None:
+            return web.json_response({"status": "error", "message": "Bot not found"}, status=404)
+        if not row[1]:
+            return web.json_response(
+                {"status": "error", "message": "This bot has no token yet"}, status=400
+            )
+        await cog.start_single_bot(bot_rowid, row[1])
+    else:
+        await cog.stop_music_bot(bot_rowid)
+
+    return web.json_response({"status": "ok"})
 
 # ---------------------------------------------------------------------
 
@@ -244,7 +297,11 @@ async def handle_plugin_settings(request):
 async def start_internal_api():
     app = web.Application()
     app.router.add_post("/internal/toggle-cog", handle_reload_cog)
-    app.router.add_post("/internal/toggle-music-bot", handle_toggle_music_bot)
+    app.router.add_get("/internal/music/bots", handle_music_list)
+    app.router.add_post("/internal/music/add", handle_music_add)
+    app.router.add_post("/internal/music/remove", handle_music_remove)
+    app.router.add_post("/internal/music/save-token", handle_music_save_token)
+    app.router.add_post("/internal/music/set-active", handle_music_set_active)
     app.router.add_get("/internal/stats", handle_stats)
     app.router.add_post("/internal/check-admin", handle_check_admin)
     app.router.add_get("/internal/plugins", handle_list_plugins)

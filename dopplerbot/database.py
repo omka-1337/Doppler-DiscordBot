@@ -1,6 +1,8 @@
 import asyncio
 import aiosqlite
 import logging
+import os
+import re
 from pathlib import Path
 
 SAVEDATA_DIR = Path(__file__).resolve().parent.parent / "savedata"
@@ -83,16 +85,6 @@ async def ensure_tables(db):
         )
     """)
 
-    # TABLE / MUSIC BOTs SETTINGS
-    # The bot_token and bot_user_id entries are initially created as empty fields and are filled in later via the web dashboard.
-    await db.execute("""
-        CREATE TABLE IF NOT EXISTS music_bots (
-            bot_rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-            bot_token TEXT,
-            bot_user_id INTEGER,
-            bot_status INTEGER NOT NULL DEFAULT 1
-        )
-    """)
     await db.commit()
 
 
@@ -140,7 +132,82 @@ LEGACY_SETTINGS_MOVES = [
     ("ServerProtect", "raid_lockdown_active", "serverprotect", "raid_lockdown_active"),
     ("ServerProtect", "raid_lockdown_started_at", "serverprotect", "raid_lockdown_started_at"),
     ("Modules", "server_protect", "Plugins", "serverprotect"),
+
+    # Music
+    ("Modules", "music_bots", "Plugins", "music"),
 ]
+
+
+# As with settings, a module moving to the plugin API takes its tables with it,
+# from the core database into savedata/plugins/<id>/data.db. Each entry is
+# (table, plugin_id). The table is copied with its schema intact and then
+# dropped here, so this runs once and finds nothing on later startups.
+LEGACY_TABLE_MOVES = [
+    ("music_bots", "music"),
+]
+
+
+# Secrets a migrated module used to read straight out of the environment. They
+# are copied into the plugin's namespace once, so the plugin never touches
+# os.getenv and the value becomes editable from the dashboard like any other
+# setting. Each entry is (env var, plugin_id, key); an unset variable or an
+# existing value is left alone.
+LEGACY_ENV_SEEDS = [
+    ("LAVALINK_PASSWORD", "music", "lavalink_password"),
+    ("LAVALINK_URI", "music", "lavalink_uri"),
+]
+
+
+async def seed_settings_from_env(db):
+    for env_var, plugin_id, key in LEGACY_ENV_SEEDS:
+        value = os.getenv(env_var)
+        if not value:
+            continue
+        await db.execute(
+            """
+            INSERT INTO settings (category, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(category, key) DO NOTHING
+            """,
+            (plugin_id, key, value),
+        )
+    await db.commit()
+
+
+async def migrate_legacy_tables(db):
+    for table, plugin_id in LEGACY_TABLE_MOVES:
+        async with db.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None or not row[0]:
+            continue
+
+        # Recreate the table verbatim in the plugin's database so the primary
+        # key and AUTOINCREMENT survive -- "CREATE TABLE ... AS SELECT" loses them.
+        create_sql, count = re.subn(
+            rf"^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[\"'`\[]?{table}[\"'`\]]?",
+            f'CREATE TABLE IF NOT EXISTS plugin_db."{table}"',
+            row[0],
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        if count != 1:
+            logging.error(f"Could not rewrite the schema for {table!r}; leaving it in place.")
+            continue
+
+        target_dir = SAVEDATA_DIR / "plugins" / plugin_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        await db.execute("ATTACH DATABASE ? AS plugin_db", (str(target_dir / "data.db"),))
+        try:
+            await db.execute(create_sql)
+            await db.execute(f'INSERT INTO plugin_db."{table}" SELECT * FROM main."{table}"')
+            await db.execute(f'DROP TABLE main."{table}"')
+            await db.commit()
+            logging.info(f"Moved the {table!r} table into the {plugin_id!r} plugin's database.")
+        finally:
+            await db.execute("DETACH DATABASE plugin_db")
 
 
 async def migrate_legacy_settings(db):
@@ -174,6 +241,8 @@ async def init_db():
     async with _db_lock:
         db = await _connect()
         await migrate_legacy_settings(db)
+        await migrate_legacy_tables(db)
+        await seed_settings_from_env(db)
 
         default_settings = [
             # MAIN
@@ -186,10 +255,7 @@ async def init_db():
 
             # MODULES
             ("voice_manger", "true", "Modules"),
-            ("music_bots", "true", "Modules"),
 
-            # MUSIC BOTS
-            ("music_bot_id", "", "Music")
         ]
 
         # Calling ON CONFLICT DO NOTHING during startup applies only the initial default settings without overwriting changes already made by the user.
@@ -302,123 +368,3 @@ async def get_all_temp_channels() -> list[tuple[int, int, int]]:
         ) as cursor:
             rows = await cursor.fetchall()
             return [tuple(row) for row in rows]
-
-# ----------------------MUSIC BOTS-------------------------------------
-
-# ADD MUSIC BOT
-# Creates an empty, inactive bot record for the item just added to the panel, returning its ID for future updates and configuration.
-async def add_music_bot():
-    async with _db_lock:
-        db = await _connect()
-        cursor = await db.execute("INSERT INTO music_bots (bot_token, bot_status) VALUES (?, ?)", ("", 0))
-        await db.commit()
-        return cursor.lastrowid
-
-# ---------------------------------------------------------------------
-
-# UPDATE MUSIC BOT
-# The dynamic SET part of the request updates only the fields that were actually sent,
-# ignoring values of `None` so as not to overwrite other data
-# (for example, the token when toggling the `status` switch).
-async def update_music_bot(
-    bot_rowid: int,
-    bot_token: str | None = None,
-    bot_user_id: int | None = None,
-    bot_status: int | None = None,
-):
-    if not bot_rowid:
-        logging.warning("Failed to update: bot_rowid is missing or invalid.")
-        return
-
-    fields: list[str] = []
-    params: list[str | int] = []
-
-    if bot_token is not None:
-        fields.append("bot_token = ?")
-        params.append(bot_token)
-
-    if bot_user_id is not None:
-        fields.append("bot_user_id = ?")
-        params.append(bot_user_id)
-
-    if bot_status is not None:
-        fields.append("bot_status = ?")
-        params.append(bot_status)
-
-    if not fields:
-        logging.info("No parameters provided for update. Skipping execution.")
-        return
-
-    # The bot_rowid is added to the end of params for the WHERE clause, since placeholders are substituted sequentially from left to right.
-    params.append(bot_rowid)
-    query = f"UPDATE music_bots SET {', '.join(fields)} WHERE bot_rowid = ?"
-
-    try:
-        async with _db_lock:
-            db = await _connect()
-            await db.execute(query, tuple(params))
-            await db.commit()
-
-    except Exception as e:
-        logging.error(f"Error while update settings: {e}")
-
-# ---------------------------------------------------------------------
-
-# The function returns a record by ID, replacing None in the token with an empty string to make it easier to check for the presence of data.
-async def get_music_bot(bot_rowid: int) -> tuple[int, str, int | None, int] | None:
-    try:
-        async with _db_lock:
-            db = await _connect()
-            async with db.execute(
-                "SELECT bot_rowid, bot_token, bot_user_id, bot_status "
-                "FROM music_bots WHERE bot_rowid = ?",
-                (bot_rowid,),
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row is None:
-                    return None
-
-                r_id, token, user_id, status = row
-                
-                safe_user_id = int(user_id) if user_id is not None else None
-                safe_token = str(token) if token is not None else ""
-                
-                return (int(r_id), safe_token, safe_user_id, int(status))
-
-    except Exception as e:
-        logging.error(f"Error while getting bot info: {e}")
-        return None
-
-# ---------------------------------------------------------------------
-
-# The function returns all records without filtering, leaving it up to the caller to determine which bots are inactive or empty.
-async def get_all_music_bots() -> list[tuple]:
-    query = """
-        SELECT bot_rowid, bot_token, bot_user_id, bot_status
-        FROM music_bots
-    """
-    results: list[tuple] = []
-    try:
-        async with _db_lock:
-            db = await _connect()
-            async with db.execute(query) as cursor:
-                rows = await cursor.fetchall()
-                results = [tuple(row) for row in rows]
-
-    except Exception as e:
-        logging.error(f"Error while fetching music bot: {e}")
-  
-    return results
-
-# ---------------------------------------------------------------------
-
-# Deletes the bot's data from the db.
-async def remove_music_bot(bot_rowid: int):
-    try:
-        async with _db_lock:
-            db = await _connect()
-            query = "DELETE FROM music_bots WHERE bot_rowid = ?"
-            await db.execute(query, (bot_rowid,))
-            await db.commit()
-    except Exception as e:
-        logging.error(f"Error while removing music bot {e}")

@@ -1,4 +1,3 @@
-from dopplerbot.database import update_music_bot, add_music_bot, remove_music_bot, get_all_music_bots
 import asyncio
 import json
 import os
@@ -315,7 +314,6 @@ async def save_settings(request: Request):
 
 MODULE_TOGGLE_MAP = {
     "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
-    "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
 }
 
 class ModuleTogglePayload(BaseModel):
@@ -422,71 +420,53 @@ async def save_plugin_settings(payload: PluginSettingsPayload):
 
 # ----------------------------MUSIC BOTS-------------------------------
 
-# MUSIC BOTS ENDPOINTS
+# MUSIC WORKER BOTS
+# The worker accounts belong to the music plugin and live in its own database,
+# so the dashboard no longer reads them directly -- it asks the bot, which
+# updates the row and starts or stops the worker together.
 class MusicBotPayload(BaseModel):
     bot_rowid: int
     bot_token: str
 
-@app.post("/api/music/save-token")
-async def save_music_bot_token(payload: MusicBotPayload):
-    await update_music_bot(payload.bot_rowid, bot_token=payload.bot_token)
-
-    await notify_music_bot(payload.bot_rowid, "stop")
-    notified = await notify_music_bot(payload.bot_rowid, "start")
-
-    return JSONResponse({"status": "ok", "bot_notified": notified})
-
-@app.post("/api/music/add-bot")
-async def add_music_bot_endpoint():
-    bot_rowid = await add_music_bot()
-    return JSONResponse({"status": "ok", "bot_rowid": bot_rowid})
-
-@app.get ("/api/music/bots")
-async def get_music_bots_endpoint():
-    bots = await get_all_music_bots()
-    return JSONResponse({"status": "ok", "bots": bots})
-
-# ---------------------------------------------------------------------
 
 class MusicBotIdPayload(BaseModel):
     bot_rowid: int
 
-@app.post("/api/music/remove-bot")
-async def remove_music_bot_endpoint(payload: MusicBotIdPayload):
-    await notify_music_bot(payload.bot_rowid, "stop")
-    await remove_music_bot(payload.bot_rowid)
-    return JSONResponse({"status": "ok"})
-
-# ---------------------------------------------------------------------
 
 class ToggleBotPayload(BaseModel):
     bot_rowid: int
     is_active: bool
 
+
+@app.get("/api/music/bots")
+async def get_music_bots_endpoint():
+    return JSONResponse(await _call_bot("GET", "/internal/music/bots"))
+
+
+@app.post("/api/music/add-bot")
+async def add_music_bot_endpoint():
+    return JSONResponse(await _call_bot("POST", "/internal/music/add"))
+
+
+@app.post("/api/music/remove-bot")
+async def remove_music_bot_endpoint(payload: MusicBotIdPayload):
+    return JSONResponse(await _call_bot("POST", "/internal/music/remove", {"bot_rowid": payload.bot_rowid}))
+
+
+@app.post("/api/music/save-token")
+async def save_music_bot_token(payload: MusicBotPayload):
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/music/save-token",
+        {"bot_rowid": payload.bot_rowid, "bot_token": payload.bot_token},
+    ))
+
+
 @app.post("/api/music/toggle-active")
 async def toggle_bot_active(payload: ToggleBotPayload):
-    await update_music_bot(payload.bot_rowid, bot_status=int(payload.is_active))
-
-    action = "start" if payload.is_active else "stop"
-    notified = await notify_music_bot(payload.bot_rowid, action)
-
-    return JSONResponse({"status": "ok", "bot_notified": notified})
-
-# ---------------------------------------------------------------------
-
-# MUSIC BOT WHILE ACTIVE STATUS CHANGED
-async def notify_music_bot(bot_rowid: int, action: str) -> bool:
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://doppler_discord_bot:8001/internal/toggle-music-bot",
-                json={"bot_rowid": bot_rowid, "action": action},
-                timeout=5.0
-            )
-            return response.status_code == 200
-    except Exception as e:
-        print(f"Failed to notify bot conatiner about music bot {bot_rowid}: {e}")
-        return False
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/music/set-active",
+        {"bot_rowid": payload.bot_rowid, "is_active": payload.is_active},
+    ))
 
 # ---------------------------OAuth-------------------------------------
 

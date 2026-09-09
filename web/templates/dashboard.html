@@ -296,7 +296,7 @@
             </form>
 
             <!-- MODULE: MUSIC SETTINGS -->
-            <form id="form-module-Music" onsubmit="saveSettings(event, 'Music')"
+            <div id="form-module-Music"
                 class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
 
                 <!-- YouTube OAuth Status -->
@@ -317,22 +317,6 @@
                     </div>
                 </div>
 
-                <!-- Module Enable/Disable Toggle Row -->
-                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
-                    <div>
-                        <span class="block text-xs font-bold text-gray-300 uppercase">Music Module Status</span>
-                        <span class="text-[10px] text-gray-400">Enable or disable the music module</span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="chk_music_enabled" {% if settings_modules.get('music_enabled', 'true'
-                            )=='true' %}checked{% endif %} onchange="toggleModule('music', this.checked)"
-                            class="sr-only peer">
-                        <div
-                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
-                        </div>
-                    </label>
-                </div>
-
                 <!-- Header & Add Bot Button -->
                 <div class="flex items-center justify-between border-b border-[#3f4147] pb-2">
                     <h3 class="text-md font-bold text-gray-200 uppercase text-xs tracking-wider">Music Instances</h3>
@@ -347,13 +331,7 @@
                     <!-- Rows will be injected here via JavaScript -->
                 </div>
 
-                <div class="pt-2">
-                    <button type="button" onclick="saveMusicBot(1)"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
-                        Save Module Settings
-                    </button>
-                </div>
-            </form>
+            </div>
 
             <p id="moduleStatusMsg"
                 class="text-sm font-semibold hidden p-3 rounded bg-[#2b2d31] border border-[#3f4147] text-center"></p>

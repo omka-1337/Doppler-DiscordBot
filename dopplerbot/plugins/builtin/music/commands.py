@@ -4,23 +4,21 @@ import logging
 
 from typing import cast
 from typing import Literal
-from dopplerbot.cogs.music.MusicBotsManager import MusicBotsManager
-from utils.music.MusicPlayer import MusicPlayer
+from .manager import MusicBotsManager
+from .player import MusicPlayer
 from discord.ext import commands
 from discord import app_commands
 
 class MusicCommands(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
     """
     Main bot commands. The MAIN bot itself never joins a voice channel—
     it acts solely as a "conductor": it finds the right worker via MusicBotsManager
     and performs actions on its behalf (sub_bot.connect(), player.add_to_queue()).
     """
 
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self, plugin):
+        self.plugin = plugin
+        self.bot = plugin.bot
 
     @app_commands.command(name="play", description="Play a track or add it to the queue")
     @app_commands.describe(
@@ -120,6 +118,3 @@ class MusicCommands(commands.Cog):
         await player.add_to_queue(track)
 
         await interaction.followup.send(f"Added to queue: {track.title}", ephemeral=True)
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(MusicCommands(bot))

@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 import discord
 
 from dopplerbot.database import SAVEDATA_DIR, get_settings, get_settings_by_category, set_settings
+from dopplerbot.plugins.db import PluginDatabase
 from dopplerbot.plugins.manifest import PluginManifest
 
 if TYPE_CHECKING:
@@ -199,6 +200,7 @@ class PluginContext:
         self.bot = bot
         self.log = logging.getLogger(f"plugin.{manifest.id}")
         self.settings = ScopedSettings(manifest.id, schema)
+        self._db: PluginDatabase | None = None
         # Registrations tracked so unloading a plugin really removes it -- this
         # is what makes reloading a plugin without restarting the bot work.
         self._cogs: list[str] = []
@@ -210,6 +212,16 @@ class PluginContext:
         path = SAVEDATA_DIR / "plugins" / self.id
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    @property
+    def db(self) -> PluginDatabase:
+        """This plugin's own SQLite database, for data that needs tables.
+
+        The file lives in ``data_dir``; create the schema in ``setup()``.
+        """
+        if self._db is None:
+            self._db = PluginDatabase(self.id, self.data_dir / "data.db")
+        return self._db
 
     @property
     def savedata_dir(self) -> Path:
@@ -233,6 +245,10 @@ class PluginContext:
 
     async def _unregister(self):
         """Undo every registration made through this context."""
+        if self._db is not None:
+            await self._db.close()
+            self._db = None
+
         for cog_name in reversed(self._cogs):
             try:
                 await self.bot.remove_cog(cog_name)

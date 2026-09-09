@@ -762,52 +762,6 @@ function switchTab(tabName) {
     }
 }
 
-// Add handler for 'Music' module in saveSettings function
-const originalSaveSettings = window.saveSettings;
-window.saveSettings = async function (event, category) {
-    if (category === 'Music') {
-        const musicChk = document.getElementById('chk_music_enabled');
-        if (musicChk) {
-            // Include music module toggle into generic settings payload
-            const isCogTab = !document.getElementById('tab-cogs').classList.contains('hidden');
-            const statusMsg = isCogTab
-                ? document.getElementById('moduleStatusMsg')
-                : document.getElementById('settingsStatusMsg');
-
-            const settingsPayload = {
-                category: 'Modules',
-                settings: {
-                    music_enabled: musicChk.checked ? 'true' : 'false'
-                }
-            };
-
-            try {
-                const res = await fetch('/api/save-settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(settingsPayload)
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    statusMsg.textContent = `✅ ${data.message || 'Music module settings saved'}`;
-                    statusMsg.className = 'text-sm font-semibold p-3 rounded bg-[#2b2d31] border border-green-500/50 text-green-400 text-center';
-                } else {
-                    statusMsg.textContent = `❌ ${data.detail || 'Error saving settings'}`;
-                    statusMsg.className = 'text-sm font-semibold p-3 rounded bg-[#2b2d31] border border-red-500/50 text-red-400 text-center';
-                }
-            } catch (err) {
-                statusMsg.textContent = '❌ Error connecting to server';
-                statusMsg.className = 'text-sm font-semibold p-3 rounded bg-[#2b2d31] border border-red-500/50 text-red-400 text-center';
-            }
-            statusMsg.classList.remove('hidden');
-            setTimeout(() => statusMsg.classList.add('hidden'), 4000);
-            event.preventDefault();
-            return;
-        }
-    }
-    return originalSaveSettings(event, category);
-};
-
 // ---------------------------- MUSIC BOTS LOGIC ----------------------------
 
 // Fetch and display all music bots on load

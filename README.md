@@ -4,7 +4,7 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 
 ## Features
 
-- 🎵 **Music** — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
+- 🎵 **Music** *(plugin)* — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
 - 🤖 **AI Chat** *(plugin)* — conversational AI; pick a provider (Google Gemini, DeepSeek, or ChatGPT) from the dashboard, where the persona name, system prompt, language, tone, and provider API key are all configured.
 - 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Supports DeepL and Google (official API or a free keyless fallback).
 - 🔊 **Temporary Voice Channels** — joining a configured "hub" channel automatically creates a private voice channel for the user, with a rename button.
@@ -26,6 +26,10 @@ plugins/my_plugin/
 ├── plugin.json     # id, name, version, api_version, description, author, icon
 └── plugin.py       # a subclass of dopplerbot.plugins.api.Plugin
 ```
+
+Settings are key/value; a plugin that needs real tables gets its own SQLite
+database at `savedata/plugins/<id>/data.db` through `ctx.db`, and creates its
+schema itself. Nothing is shared with the core database or with other plugins.
 
 ```python
 from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType

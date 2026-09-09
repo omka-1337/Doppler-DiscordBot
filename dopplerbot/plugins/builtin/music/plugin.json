@@ -1,0 +1,12 @@
+{
+  "id": "music",
+  "name": "Music",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "description": "/play with a queue and on-message playback controls. Runs on Lavalink; several worker bot accounts can play in different voice channels at once.",
+  "author": "Doppler",
+  "icon": "📻",
+  "entrypoint": "plugin.py",
+  "requirements": ["wavelink"],
+  "default_enabled": true
+}

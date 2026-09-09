@@ -1,16 +1,12 @@
-from utils.music.MusicPlayer import MusicPlayer
 import asyncio
 import logging
 import discord
 import wavelink
-import os
 
 from typing import Dict
 from discord.ext import commands
-from dopplerbot.database import get_all_music_bots, update_music_bot
 
-LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
-LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
+from .player import MusicPlayer
 
 class MusicBotsManager(commands.Cog):
 
@@ -20,8 +16,10 @@ class MusicBotsManager(commands.Cog):
     The Manager is only responsible for "which bots are currently active and in which channel."
     """
 
-    def __init__(self, main_bot: commands.Bot):
-        self.main_bot = main_bot
+    def __init__(self, plugin):
+        self.plugin = plugin
+        self.main_bot = plugin.bot
+        self.store = plugin.store
         # The dictionary maps IDs from the `music_bots` table to a live instance of
         # discord.Client, serving as the single source of truth for running workers.
         self.running_bots: Dict[int, discord.Client] = {}
@@ -39,7 +37,14 @@ class MusicBotsManager(commands.Cog):
     # The method is called automatically when unload_extension() is executed, ensuring
     # that all sub-bots are disconnected from voice channels when the module is disabled.
     async def cog_unload(self):
-        logging.info("Stopping all music music bots...")
+        logging.info("Stopping all music bots...")
+
+        # The startup task waits on the main bot becoming ready, which may never
+        # happen; leaving it pending would stack up one task per plugin reload.
+        if self._init_task is not None and not self._init_task.done():
+            self._init_task.cancel()
+        self._init_task = None
+
         # Copying keys using list(...) creates a snapshot before the loop begins,
         # preventing a RuntimeError caused by changes to the dictionary during iteration.
         tasks = [
@@ -56,9 +61,19 @@ class MusicBotsManager(commands.Cog):
     # A bulk launch retrieves only active bots from the database,
     # delegating client creation to the start_single_bot function to reuse the logic.
     async def start_music_bots(self):
+        try:
+            await self._start_music_bots()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Runs detached as a task, so without this an error here would only
+            # ever surface as asyncio's "exception was never retrieved" warning.
+            logging.exception("Failed to start the music workers.")
+
+    async def _start_music_bots(self):
         await self.main_bot.wait_until_ready()
 
-        bots_data = await get_all_music_bots()
+        bots_data = await self.store.all()
         if not bots_data:
             logging.info("No music bots found in database.")
             return
@@ -88,6 +103,10 @@ class MusicBotsManager(commands.Cog):
         # message_content: The intent does not trigger because the worker is controlled
         # directly by the main bot and does not process text commands that would make
         # no sense and would create additional problems for users.
+        settings = await self.plugin.settings.all()
+        lavalink_uri = settings["lavalink_uri"]
+        lavalink_password = settings["lavalink_password"]
+
         intents = discord.Intents.default()
         sub_bot = discord.Client(intents=intents)
 
@@ -97,15 +116,15 @@ class MusicBotsManager(commands.Cog):
             # the use of the last sub_bot object from memory in all on_ready handlers.
             if bot.user:
                 logging.info(f"Secondary bot ready: {bot.user}")
-                await update_music_bot(bot_rowid, bot_user_id=bot.user.id)
+                await self.store.update(bot_rowid, bot_user_id=bot.user.id)
 
-                if LAVALINK_PASSWORD is None:
-                    logging.error("Lavalink password is not configured.")
+                if not lavalink_password:
+                    logging.error("Lavalink password is not configured in the music plugin's settings.")
                     return
 
                 # Each worker has its own connection to Lavalink, since the server distinguishes between
                 # sessions based on the bot's `user_id` and can handle several of them at the same time.
-                node = wavelink.Node(uri=LAVALINK_URI, password=LAVALINK_PASSWORD)
+                node = wavelink.Node(uri=lavalink_uri, password=lavalink_password)
                 await wavelink.Pool.connect(client=bot, nodes=[node])
                 logging.info(f"Music bot {bot_rowid} connected to Lavalink.")
 

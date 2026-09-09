@@ -362,7 +362,7 @@
                     </button>
                     <button type="button" onclick="switchSettingsCategory('AI')" id="cat-btn-AI"
                         class="settings-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
-                        {{ t.settings.tab_ai }}
+                        {{ t.settings.tab_providers }}
                     </button>
                     <button type="button" onclick="switchSettingsCategory('System')" id="cat-btn-System"
                         class="settings-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
@@ -403,61 +403,28 @@
                 </div>
             </form>
 
-            <!-- Category: AI PROVIDER -->
-            <!-- These are the bot's credentials, not a plugin's: a plugin asks
-                 ctx.ai for a completion and never sees the key. -->
-            <form id="form-settings-AI" onsubmit="saveSettings(event, 'AI')"
+            <!-- Category: PROVIDERS -->
+            <!-- Rendered from /api/providers rather than the template: the
+                 broker reports which keys are set but never their values. -->
+            <div id="form-settings-AI"
                 class="settings-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-5">
 
                 <div class="border-b border-[#3f4147] pb-3">
                     <h3 class="text-md font-bold text-gray-200 uppercase text-xs tracking-wider">
-                        {{ t.settings.ai.title }}
+                        {{ t.settings.providers.title }}
                     </h3>
-                    <p class="text-xs text-gray-400 mt-1">{{ t.settings.ai.description }}</p>
+                    <p class="text-xs text-gray-400 mt-1">{{ t.settings.providers.description }}</p>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">{{ t.settings.ai.provider }}</label>
-                    <select name="provider" id="set_ai_provider"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
-                        <option value="gemini" {% if settings_ai.get('provider', 'gemini')=='gemini' %}selected{% endif %}>Google Gemini</option>
-                        <option value="deepseek" {% if settings_ai.get('provider')=='deepseek' %}selected{% endif %}>DeepSeek</option>
-                        <option value="chatgpt" {% if settings_ai.get('provider')=='chatgpt' %}selected{% endif %}>ChatGPT</option>
-                    </select>
-                    <p class="text-[11px] text-gray-400 mt-1">{{ t.settings.ai.provider_hint }}</p>
+                <div class="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-indigo-200 text-xs leading-relaxed flex items-start gap-2.5">
+                    <span class="text-base leading-none">🔐</span>
+                    <div>{{ t.settings.providers.note }}</div>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Gemini API key</label>
-                    <input type="password" name="gemini_api_key" value="{{ settings_ai.get('gemini_api_key', '') }}"
-                        placeholder="Enter Gemini API key..." onmouseenter="this.type='text'"
-                        onmouseleave="this.type='password'" autocomplete="off"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
+                <div id="providersForm" class="space-y-6">
+                    <p class="text-xs text-gray-400">{{ t.plugins.loading }}</p>
                 </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">DeepSeek API key</label>
-                    <input type="password" name="deepseek_api_key" value="{{ settings_ai.get('deepseek_api_key', '') }}"
-                        placeholder="Enter DeepSeek API key..." onmouseenter="this.type='text'"
-                        onmouseleave="this.type='password'" autocomplete="off"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">ChatGPT API key</label>
-                    <input type="password" name="chatgpt_api_key" value="{{ settings_ai.get('chatgpt_api_key', '') }}"
-                        placeholder="Enter OpenAI API key..." onmouseenter="this.type='text'"
-                        onmouseleave="this.type='password'" autocomplete="off"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
-                </div>
-
-                <div class="pt-2">
-                    <button type="submit"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2.5 rounded-lg transition shadow-md text-sm">
-                        {{ t.settings.ai.save }}
-                    </button>
-                </div>
-            </form>
+            </div>
 
             <!-- Category: API KEYS & TOKEN -->
             <form id="form-settings-System" onsubmit="saveSystemSettings(event)"

@@ -26,7 +26,9 @@ from pathlib import Path
 import docker
 from aiohttp import web
 
-from broker import sources
+from broker import secret_store, sources
+from broker.providers import ai as ai_providers
+from broker.providers import translate as translate_provider
 from dopplerbot.plugins.manifest import PluginManifestError, load_manifest
 
 logging.basicConfig(
@@ -466,6 +468,82 @@ async def handle_uninstall(request):
     return web.json_response({"status": "ok"})
 
 
+# ---------------------------------------------------------------------
+# Provider capabilities.
+#
+# The point of doing this here rather than in the bot: the credential is used
+# in this container and never returned. A plugin can ask for a completion or a
+# translation, but the key stays on this side of the boundary -- unlike
+# everything in the bot's process, which plugin code can read.
+
+async def handle_providers(request):
+    return web.json_response({"status": "ok", "providers": secret_store.describe()})
+
+
+async def handle_set_provider(request):
+    data = await request.json()
+    section = data.get("section")
+    values = data.get("values") or {}
+
+    try:
+        await asyncio.to_thread(secret_store.update, section, values)
+    except KeyError:
+        return web.json_response({"status": "error", "message": f"Unknown section {section!r}"}, status=404)
+
+    return web.json_response({"status": "ok", "providers": secret_store.describe()})
+
+
+async def handle_ai_complete(request):
+    data = await request.json()
+    system_prompt = data.get("system_prompt", "")
+    prompt = data.get("prompt", "")
+
+    if not prompt:
+        return web.json_response({"status": "error", "message": "prompt is required"}, status=400)
+
+    config = secret_store.get("ai")
+    provider_name = config.get("provider", "gemini")
+    api_key = config.get(f"{provider_name}_api_key", "")
+
+    if not api_key:
+        return web.json_response(
+            {"status": "error", "message": f"No API key is configured for {provider_name}."}, status=400
+        )
+
+    provider = ai_providers.PROVIDERS.get(provider_name, ai_providers.gemini)
+    try:
+        text = await provider.generate_reply(system_prompt, prompt, api_key)
+    except Exception as e:
+        log.error("%s request failed: %s", provider_name, e)
+        return web.json_response(
+            {"status": "error", "message": f"{provider_name} request failed: {e}"}, status=502
+        )
+
+    return web.json_response({"status": "ok", "text": text or ""})
+
+
+async def handle_translate(request):
+    data = await request.json()
+    text = data.get("text", "")
+    target = data.get("target_lang", "en")
+
+    if not text:
+        return web.json_response({"status": "error", "message": "text is required"}, status=400)
+
+    try:
+        result = await translate_provider.translate(text, target, secret_store.get("translate"))
+    except translate_provider.TranslationError as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=502)
+
+    return web.json_response({
+        "status": "ok",
+        "text": result.translated_text,
+        "source_lang": result.source_lang,
+        "target_lang": result.target_lang,
+        "provider": result.provider_used,
+    })
+
+
 def make_app():
     app = web.Application()
     app.router.add_get("/health", handle_health)
@@ -479,9 +557,15 @@ def make_app():
     app.router.add_get("/catalog", handle_catalog)
     app.router.add_post("/plugins/install", handle_install)
     app.router.add_post("/plugins/uninstall", handle_uninstall)
+    app.router.add_get("/providers", handle_providers)
+    app.router.add_post("/providers", handle_set_provider)
+    app.router.add_post("/ai/complete", handle_ai_complete)
+    app.router.add_post("/translate", handle_translate)
     return app
 
 
 if __name__ == "__main__":
+    secret_store.import_from_env()
+    secret_store.import_from_legacy_db()
     log.info("Service broker starting on port 8002 (network=%s)", own_network())
     web.run_app(make_app(), host="0.0.0.0", port=8002, access_log=None)

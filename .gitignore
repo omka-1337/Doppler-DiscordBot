@@ -13,3 +13,5 @@ savedata
 
 # Written by the broker: which source each installed plugin came from.
 config/installed.json
+secrets/*
+!secrets/README.md

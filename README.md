@@ -53,26 +53,40 @@ That last point is a namespace boundary, not a sandbox — a plugin is Python ru
 
 Cogs and persistent views registered through `self.ctx` are removed automatically when the plugin is unloaded, which is what makes the dashboard's **Reload** button able to swap a plugin's code in place while the bot stays connected.
 
-### Text generation
+### Provider credentials
 
-The AI provider and its API key are configured once, on the bot, under
-**Settings → AI Provider**. Every plugin that wants a model uses that one:
+AI and translation keys are configured once, under **Settings → Providers**,
+and shared by every plugin that needs them — so a key is never pasted into more
+than one place, and switching model or translation service is one change rather
+than one per plugin.
+
+They are held by the **broker**, in a `secrets/` volume that is not mounted into
+the bot container at all, and the broker never hands a value back. A plugin asks
+for the result:
 
 ```python
-reply = await self.ctx.ai.complete(system_prompt, prompt)
+reply  = await self.ctx.ai.complete(system_prompt, prompt)
+result = await self.ctx.translate.text("hello", "uk")
 ```
 
-Without this, each AI-using plugin would carry its own provider dropdown and
-its own copy of the key — three plugins meaning three places to paste the same
-key, and three places for them to drift out of step. One setting, one bill,
-one model for everything.
+The call is made on the broker's side, so the credential never enters the
+process plugin code runs in. That is a real boundary, unlike the settings
+namespacing, which is a convention: a plugin can read the bot's database
+directly if it wants to.
 
-A plugin never receives the key as a side effect, which also means it cannot
-leak one by logging its own settings. That is a smaller benefit than it sounds:
-plugin code runs in the bot's process and could still go looking. It removes
-the accident, not the attack.
+**What is still reachable from a plugin**, and cannot be moved without a much
+larger redesign:
 
-### Sources and trust
+- `DISCORD_BOT_TOKEN` — discord.py holds it in memory to keep the gateway open.
+  A plugin can read it, and with it do anything the bot can do. This is the
+  hard floor of running plugins in the bot's process.
+- The music plugin's Lavalink password and YouTube refresh token, because
+  `wavelink` connects from the bot's process.
+
+So installing a plugin still means trusting it. What this buys is that the
+provider keys are no longer part of what you hand over.
+
+### Sources and trust### Sources and trust
 
 Plugins are installed from *sources* — a GitHub repository and branch holding
 one directory per plugin plus an `index.json` catalogue. There is exactly one

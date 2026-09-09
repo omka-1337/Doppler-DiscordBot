@@ -182,7 +182,6 @@ async def get_dashboard(request: Request):
     bot_info = await get_bot_info()
 
     settings_main = await get_settings_by_category("Main")
-    settings_ai = await get_settings_by_category("AI")
     settings_modules = await get_settings_by_category("Modules")
 
     t = get_translations("en")
@@ -194,7 +193,6 @@ async def get_dashboard(request: Request):
             "t": t,
             "bot": bot_info,
             "settings_main": settings_main,
-            "settings_ai": settings_ai,
             "settings_modules": settings_modules,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
@@ -315,6 +313,7 @@ async def save_settings(request: Request):
 # The bot process owns the plugin registry -- it is the one that imports the
 # code and holds the running instances -- so the dashboard only proxies to it.
 BOT_INTERNAL_API = "http://doppler_discord_bot:8001"
+BROKER_API = os.getenv("BROKER_URL", "http://doppler_service_broker:8002")
 
 
 async def _call_bot(method: str, path: str, payload: dict | None = None) -> dict:
@@ -336,6 +335,45 @@ async def _call_bot(method: str, path: str, payload: dict | None = None) -> dict
         raise HTTPException(status_code=response.status_code, detail=detail)
 
     return response.json()
+
+
+async def _call_broker(method: str, path: str, payload: dict | None = None) -> dict:
+    """Talk to the broker directly; see BROKER_API above for why."""
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(f"{BROKER_API}{path}", timeout=15.0)
+            else:
+                response = await client.post(f"{BROKER_API}{path}", json=payload or {}, timeout=60.0)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Broker is not reachable: {e}") from e
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("message", response.text)
+        except Exception:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    return response.json()
+
+
+class ProviderPayload(BaseModel):
+    section: str
+    values: dict
+
+
+@app.get("/api/providers")
+async def get_providers():
+    """Provider settings and which keys are set. Never the keys themselves."""
+    return JSONResponse(await _call_broker("GET", "/providers"))
+
+
+@app.post("/api/providers")
+async def set_providers(payload: ProviderPayload):
+    return JSONResponse(await _call_broker(
+        "POST", "/providers", {"section": payload.section, "values": payload.values}
+    ))
 
 
 class PluginTogglePayload(BaseModel):

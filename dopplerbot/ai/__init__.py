@@ -1,23 +1,20 @@
-"""Text generation, owned by the bot rather than by any plugin.
+"""Text generation, performed by the broker.
 
-The provider and its API key are core settings. A plugin never sees them: it
-hands over a system prompt and a prompt through ``ctx.ai`` and gets text back,
-and which service answered is none of its business.
+Nothing here holds an API key, and neither does anything else in this process.
+The prompt is sent to the broker, which owns the credentials in a volume this
+container cannot see, makes the call, and returns only the text.
 
-This is a layer, not a wall. Plugin code runs inside the bot's process, so a
-plugin that went looking could still read the key out of the database. What it
-does buy is that a *well-behaved* plugin never holds the key at all, so it
-cannot leak one by logging its own settings or shipping them somewhere -- and
-one configured provider now serves every plugin instead of each keeping a copy.
+That matters because plugin code runs in this process and can read anything
+this process can. Keeping the key out of it is the only way to keep it away
+from an installed plugin.
 """
 
 import logging
+import os
 
-from dopplerbot.database import get_settings_by_category
+import httpx
 
-from .providers import PROVIDERS, gemini
-
-SETTINGS_CATEGORY = "AI"
+BROKER_URL = os.getenv("BROKER_URL", "http://doppler_service_broker:8002")
 
 log = logging.getLogger("ai")
 
@@ -26,31 +23,35 @@ class AIError(Exception):
     """Raised when no provider is usable or the provider call failed."""
 
 
-async def get_config() -> dict:
-    settings = await get_settings_by_category(SETTINGS_CATEGORY)
-    provider_name = settings.get("provider", "gemini")
-    return {
-        "provider": provider_name,
-        "api_key": settings.get(f"{provider_name}_api_key", ""),
-    }
+async def _broker(method: str, path: str, payload: dict | None = None) -> dict:
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(f"{BROKER_URL}{path}", timeout=15.0)
+            else:
+                response = await client.post(f"{BROKER_URL}{path}", json=payload or {}, timeout=180.0)
+    except Exception as e:
+        raise AIError(f"Service broker is not reachable: {e}") from e
+
+    data = response.json()
+    if response.status_code != 200:
+        raise AIError(data.get("message", response.text))
+    return data
 
 
 async def is_configured() -> bool:
-    return bool((await get_config())["api_key"])
+    """Whether the selected provider has a key, so a caller can fail politely."""
+    try:
+        providers = (await _broker("GET", "/providers"))["providers"]
+    except AIError:
+        return False
+
+    section = providers.get("ai", {})
+    provider = section.get("provider", "gemini")
+    return bool(section.get("configured", {}).get(f"{provider}_api_key"))
 
 
 async def complete(system_prompt: str, prompt: str) -> str:
     """Send a prompt to the configured provider and return its reply."""
-    config = await get_config()
-    provider_name = config["provider"]
-
-    if not config["api_key"]:
-        raise AIError(f"No API key is configured for {provider_name}.")
-
-    provider = PROVIDERS.get(provider_name, gemini)
-
-    try:
-        return await provider.generate_reply(system_prompt, prompt, config["api_key"])
-    except Exception as e:
-        log.error("%s request failed: %s", provider_name, e)
-        raise AIError(f"{provider_name} request failed: {e}") from e
+    data = await _broker("POST", "/ai/complete", {"system_prompt": system_prompt, "prompt": prompt})
+    return data.get("text", "")

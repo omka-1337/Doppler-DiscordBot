@@ -36,7 +36,9 @@ import discord
 import httpx
 
 from dopplerbot import ai as core_ai
+from dopplerbot import translate as core_translate
 from dopplerbot.ai import AIError  # re-exported for plugins
+from dopplerbot.translate import TranslationError, TranslationResult  # re-exported for plugins
 from dopplerbot.database import SAVEDATA_DIR, get_settings, get_settings_by_category, set_settings
 from dopplerbot.plugins.db import PluginDatabase
 from dopplerbot.plugins.manifest import PluginManifest, ServiceSpec
@@ -316,6 +318,22 @@ class AIAccess:
         return await core_ai.is_configured()
 
 
+class TranslateAccess:
+    """A plugin's route to translation.
+
+    The DeepL and Google keys belong to the broker, so the plugin sends text
+    and receives a translation without the credential ever reaching the process
+    it runs in.
+    """
+
+    def __init__(self, log: logging.Logger):
+        self._log = log
+
+    async def text(self, text: str, target_lang: str) -> TranslationResult:
+        """Translate into a base language code such as "uk" or "pt-BR"."""
+        return await core_translate.translate(text, target_lang)
+
+
 class PluginContext:
     """Everything a plugin is handed at load time."""
 
@@ -327,6 +345,7 @@ class PluginContext:
         self.settings = ScopedSettings(manifest.id, schema)
         self.services = ServiceManager(manifest, self.settings, self.log)
         self.ai = AIAccess(self.log)
+        self.translate = TranslateAccess(self.log)
         self._db: PluginDatabase | None = None
         # Registrations tracked so unloading a plugin really removes it -- this
         # is what makes reloading a plugin without restarting the bot work.

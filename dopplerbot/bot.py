@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
-from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, close_db
+from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, delete_setting, close_db
 from dopplerbot.plugins import PluginRegistry
 
 load_dotenv()
@@ -445,6 +445,46 @@ async def load_cogs(bot):
 
 # ---------------------------------------------------------------------
 
+# PROVIDER KEYS
+# These used to live in the settings table, where any plugin could read them.
+# They belong to the broker now; this removes the copies the bot still holds,
+# but only once the broker confirms it has them -- deleting first would lose
+# them if the broker were unreachable.
+LEGACY_SECRET_ROWS = [
+    ("AI", ("provider", "gemini_api_key", "deepseek_api_key", "chatgpt_api_key"), "ai"),
+    ("translator", ("provider", "deepl_api_key", "google_api_key"), "translate"),
+]
+
+
+async def drop_migrated_provider_keys():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BROKER_URL}/providers", timeout=15.0)
+        providers = response.json()["providers"]
+    except Exception as e:
+        logging.warning("Could not confirm provider keys with the broker (%s); keeping them for now.", e)
+        return
+
+    removed = 0
+    for category, keys, section in LEGACY_SECRET_ROWS:
+        held = providers.get(section, {})
+        configured = held.get("configured", {})
+        stored = await get_settings_by_category(category)
+        for key in keys:
+            if key not in stored:
+                continue
+            # A blank row is safe to drop. Otherwise it goes only once the
+            # broker confirms it holds that value -- either as a set credential
+            # or, for plain settings like the provider choice, as a field.
+            if not stored[key] or configured.get(key) or key in held:
+                await delete_setting(category, key)
+                removed += 1
+
+    if removed:
+        logging.info("Removed %d provider key row(s) now held by the broker.", removed)
+
+# ---------------------------------------------------------------------
+
 # HOME GUILD LOCK
 # This bot is designed for single-guild use (settings, ServerProtect, etc. are
 # all global, not per-guild). The first guild it's ever in becomes "home" and
@@ -545,6 +585,7 @@ async def main():
         logging.info("Database initialized successfully.")
 
         await start_internal_api()
+        await drop_migrated_provider_keys()
 
         if not TOKEN:
             logging.error("DISCORD_BOT_TOKEN parameter missing in .env file.")

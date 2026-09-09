@@ -1,2 +1,10 @@
 aiohttp==3.13.2
 docker==7.1.0
+
+# Provider SDKs. They live here rather than in the bot so that the API keys
+# they need never enter the process that runs plugin code.
+google-genai
+httpx
+deepl
+google-cloud-translate
+deep-translator

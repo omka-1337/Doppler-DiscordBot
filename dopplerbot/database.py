@@ -158,7 +158,6 @@ LEGACY_ENV_SEEDS = [
     ("LAVALINK_PASSWORD", "music", "lavalink_password"),
     ("LAVALINK_URI", "music", "lavalink_uri"),
     ("YOUTUBE_OAUTH_REFRESH_TOKEN", "music", "youtube_oauth_refresh_token"),
-    ("GEMINI_API_KEY", "AI", "gemini_api_key"),
 ]
 
 
@@ -281,12 +280,6 @@ async def init_db():
             # MAIN
             ("prefix", "+", "Main"),
 
-            # AI credentials, owned by the bot rather than by any plugin.
-            ("provider", "gemini", "AI"),
-            ("gemini_api_key", "", "AI"),
-            ("deepseek_api_key", "", "AI"),
-            ("chatgpt_api_key", "", "AI"),
-
             # MODULES
 
         ]
@@ -324,6 +317,14 @@ async def get_settings(key: str, default: str | None = None, category: str | Non
         async with db.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else default
+
+
+# REMOVING A SETTING
+async def delete_setting(category: str, key: str):
+    async with _db_lock:
+        db = await _connect()
+        await db.execute("DELETE FROM settings WHERE category = ? AND key = ?", (category, key))
+        await db.commit()
 
 
 # GETTING CATEGORY SETTINGS

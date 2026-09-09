@@ -691,6 +691,8 @@ function switchSettingsCategory(catName) {
         activeForm.classList.remove('hidden');
     }
 
+    if (catName === 'AI') loadProviders();
+
     const activeBtn = document.getElementById(`cat-btn-${catName}`);
     if (activeBtn) {
         activeBtn.className = 'settings-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white';
@@ -1424,4 +1426,119 @@ async function removePluginSource(name) {
         alert('Error connecting to the server.');
     }
     loadPluginSources();
+}
+
+// ---------------------------------------------------------------------
+// PROVIDERS (AI + translation)
+//
+// The broker holds these keys in a volume the bot container cannot see, and
+// never returns their values — only whether each one is set. So this form is
+// built from that metadata, and an untouched field means "leave as is".
+
+const PROVIDER_SECTIONS = [
+    {
+        section: 'ai',
+        title: 'AI chat',
+        choices: [['gemini', 'Google Gemini'], ['deepseek', 'DeepSeek'], ['chatgpt', 'ChatGPT']],
+        keys: [
+            ['gemini_api_key', 'Gemini API key'],
+            ['deepseek_api_key', 'DeepSeek API key'],
+            ['chatgpt_api_key', 'ChatGPT API key'],
+        ],
+    },
+    {
+        section: 'translate',
+        title: 'Translation',
+        choices: [['google', 'Google'], ['deepl', 'DeepL']],
+        keys: [
+            ['deepl_api_key', 'DeepL API key'],
+            ['google_api_key', 'Google Cloud Translate API key'],
+        ],
+        hint: 'Without any key, translation falls back to a free keyless Google library.',
+    },
+];
+
+function renderProviderSection(spec, state) {
+    const configured = (state && state.configured) || {};
+    const current = (state && state.provider) || spec.choices[0][0];
+
+    const options = spec.choices
+        .map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+        .join('');
+
+    const keys = spec.keys.map(([key, label]) => `
+        <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">
+                ${escapeHtml(label)}
+                ${configured[key]
+                    ? '<span class="text-[10px] text-green-400 font-semibold ml-1">✓ set</span>'
+                    : '<span class="text-[10px] text-gray-500 font-semibold ml-1">not set</span>'}
+            </label>
+            <input type="password" id="prov_${spec.section}_${key}" autocomplete="off"
+                placeholder="${configured[key] ? 'Saved — type to replace' : 'Not set'}"
+                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
+        </div>`).join('');
+
+    return `
+    <div class="space-y-4 pb-5 border-b border-[#3f4147] last:border-0">
+        <h4 class="text-sm font-bold text-white">${escapeHtml(spec.title)}</h4>
+        <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Provider</label>
+            <select id="prov_${spec.section}_provider"
+                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+                ${options}
+            </select>
+            ${spec.hint ? `<p class="text-[11px] text-gray-400 mt-1">${escapeHtml(spec.hint)}</p>` : ''}
+        </div>
+        ${keys}
+        <button onclick="saveProviders('${spec.section}')"
+            class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm">
+            💾 Save
+        </button>
+    </div>`;
+}
+
+async function loadProviders() {
+    const host = document.getElementById('providersForm');
+    if (!host) return;
+
+    try {
+        const res = await fetch('/api/providers');
+        const data = await res.json();
+        if (!res.ok) {
+            host.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
+            return;
+        }
+        host.innerHTML = PROVIDER_SECTIONS
+            .map(spec => renderProviderSection(spec, (data.providers || {})[spec.section]))
+            .join('');
+    } catch (e) {
+        host.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function saveProviders(section) {
+    const spec = PROVIDER_SECTIONS.find(s => s.section === section);
+    if (!spec) return;
+
+    const values = { provider: document.getElementById(`prov_${section}_provider`).value };
+    // An empty field means "keep whatever is stored", so a saved key survives
+    // saving the form without retyping it.
+    spec.keys.forEach(([key]) => {
+        const el = document.getElementById(`prov_${section}_${key}`);
+        if (el && el.value.trim()) values[key] = el.value.trim();
+    });
+
+    try {
+        const res = await fetch('/api/providers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ section, values })
+        });
+        const data = await res.json();
+        alert(res.ok ? 'Provider settings saved.' : `Save failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadProviders();
 }

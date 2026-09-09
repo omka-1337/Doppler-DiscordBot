@@ -182,7 +182,6 @@ async def get_dashboard(request: Request):
     bot_info = await get_bot_info()
 
     settings_main = await get_settings_by_category("Main")
-    settings_voice = await get_settings_by_category("Voice")
     settings_modules = await get_settings_by_category("Modules")
 
     t = get_translations("en")
@@ -194,7 +193,6 @@ async def get_dashboard(request: Request):
             "t": t,
             "bot": bot_info,
             "settings_main": settings_main,
-            "settings_voice": settings_voice,
             "settings_modules": settings_modules,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
@@ -309,38 +307,6 @@ async def save_settings(request: Request):
     return JSONResponse({"status": "ok", "message": "Settings saved successfully!"})
 
 # ---------------------------------------------------------------------
-
-MODULE_TOGGLE_MAP = {
-    "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
-}
-
-class ModuleTogglePayload(BaseModel):
-    module: str
-    enabled: bool
-
-@app.post("/api/toggle-module")
-async def toggle_module(payload: ModuleTogglePayload):
-    if payload.module not in MODULE_TOGGLE_MAP:
-        raise HTTPException(status_code=400, detail="Unkown module")
-
-    cog_path, category, key_name = MODULE_TOGGLE_MAP[payload.module]
-
-    await set_settings(key_name, "true" if payload.enabled else "false", category)
-
-    action = "load" if payload.enabled else "unload"
-    notified = False
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://doppler_discord_bot:8001/internal/toggle-cog",
-                json={"cog": cog_path, "action": action},
-                timeout=5.0
-            )
-            notified = response.status_code == 200
-    except Exception as e:
-        print(f"Failed to notify bot container: {e}")
-
-    return JSONResponse({"status": "ok", "module_notified": notified})
 
 # ------------------------------PLUGINS--------------------------------
 

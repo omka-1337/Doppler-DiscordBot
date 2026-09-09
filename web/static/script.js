@@ -376,7 +376,7 @@ async function saveSettings(event, category) {
     const formData = new FormData(form);
 
     // Choose active status element based on visible tab
-    const isCogTab = !document.getElementById('tab-cogs').classList.contains('hidden');
+    const isCogTab = !document.getElementById('tab-music').classList.contains('hidden');
     const statusMsg = isCogTab
         ? document.getElementById('moduleStatusMsg')
         : document.getElementById('settingsStatusMsg');
@@ -415,25 +415,6 @@ async function saveSettings(event, category) {
     setTimeout(() => {
         statusMsg.classList.add('hidden');
     }, 4000);
-}
-
-// ---------------------------------------------------------------------
-
-async function toggleModule(moduleName, enabled) {
-    try {
-        const res = await fetch('/api/toggle-module', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ module: moduleName, enabled })
-        });
-        const data = await res.json();
-        if (!res.ok || data.status !== 'ok') {
-            alert('Failed to toggle module.');
-        }
-    } catch (err) {
-        console.error('Error toggling module:', err);
-        alert('Error connecting to the server.')
-    }
 }
 
 // ---------------------------------------------------------------------
@@ -692,27 +673,6 @@ async function saveSystemSettings(event) {
         }
     } catch (e) {
         alert('A save error occurred, or the bot is restarting.');
-    }
-}
-
-// Switch sub-categories inside Modules tab
-function switchModuleCategory(catName) {
-    document.querySelectorAll('.module-form').forEach(form => {
-        form.classList.add('hidden');
-    });
-
-    document.querySelectorAll('.module-cat-btn').forEach(btn => {
-        btn.className = 'module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
-    });
-
-    const activeForm = document.getElementById(`form-module-${catName}`);
-    if (activeForm) {
-        activeForm.classList.remove('hidden');
-    }
-
-    const activeBtn = document.getElementById(`mod-btn-${catName}`);
-    if (activeBtn) {
-        activeBtn.className = 'module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white';
     }
 }
 

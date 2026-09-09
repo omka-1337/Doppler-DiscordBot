@@ -43,9 +43,9 @@
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
                 {{ t.tabs.embed_builder }}
             </button>
-            <button onclick="switchTab('cogs')" id="btn-cogs"
+            <button onclick="switchTab('music')" id="btn-music"
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
-                {{ t.tabs.modules }}
+                {{ t.tabs.music }}
             </button>
             <button onclick="switchTab('plugins')" id="btn-plugins"
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
@@ -207,97 +207,22 @@
 
         </div>
 
-        <!-- 2. TAB: MODULES -->
-        <div id="tab-cogs" class="tab-content hidden space-y-6">
+        <!-- 2. TAB: MUSIC -->
+        <div id="tab-music" class="tab-content hidden space-y-6">
 
-            <!-- Sub-category Selector Header for Modules -->
             <div
                 class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg flex items-center justify-between">
                 <div>
                     <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                        {{ t.tabs.modules }}
+                        {{ t.tabs.music }}
                     </h2>
-                    <p class="text-xs text-gray-400 mt-1"> {{ t.modules.description }} </p>
-                </div>
-
-                <!-- Switch sub-modules -->
-                <div class="flex gap-2 bg-[#1e1f22] p-1 rounded-md border border-[#3f4147]">
-                    <button onclick="switchModuleCategory('Voice')" id="mod-btn-Voice"
-                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white">
-                        {{ t.modules.tab2 }}
-                    </button>
-                    <button onclick="switchModuleCategory('Music')" id="mod-btn-Music"
-                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
-                        {{ t.modules.tab3 }}
-                    </button>
+                    <p class="text-xs text-gray-400 mt-1"> {{ t.music.description }} </p>
                 </div>
             </div>
 
-            <!-- MODULE: VOICE SETTINGS -->
-            <form id="form-module-Voice" onsubmit="saveSettings(event, 'Voice')"
-                class="module-form bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
-
-                <!-- Module Enable/Disable Toggle Row -->
-                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
-                    <div>
-                        <span class="block text-xs font-bold text-gray-300 uppercase"> {{
-                            t.modules.voice.thumbler1_title }} </span>
-                        <span class="text-[10px] text-gray-400"> {{ t.modules.voice.thumbler1_description }} </span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="chk_voice_enabled" {% if settings_voice.get('voice_enabled', 'true'
-                            )=='true' %}checked{% endif %} onchange="toggleModule('voice', this.checked)"
-                            class="sr-only peer">
-                        <div
-                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
-                        </div>
-                    </label>
-                </div>
-
-                <h3
-                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
-                    {{ t.modules.voice.title }} </h3>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
-                        t.modules.voice.field1_title }}
-                    </label>
-                    <input type="text" name="main_voice_channel_id" id="set_main_voice_channel_id"
-                        value="{{ settings_voice.get('main_voice_channel_id', '0') }}"
-                        placeholder="Sample: 123456789012345678"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono">
-                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field1_description }} </p>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
-                        t.modules.voice.field2_title }} </label>
-                    <input type="text" name="category_id" id="set_category_id"
-                        value="{{ settings_voice.get('category_id', '0') }}" placeholder="Sample: 123456789012345678"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition font-mono font-normal">
-                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field2_description }} </p>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{
-                        t.modules.voice.field3_title }} </label>
-                    <input type="text" name="voice_channel_name_prefix" id="set_voice_channel_name_prefix"
-                        value="{{ settings_voice.get('voice_channel_name_prefix', '🏠║') }}"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                    <p class="text-[11px] text-gray-400 mt-1"> {{ t.modules.voice.field3_description }} </p>
-                </div>
-
-                <div class="pt-2">
-                    <button type="submit"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
-                        {{ t.modules.voice.save }}
-                    </button>
-                </div>
-            </form>
-
             <!-- MODULE: MUSIC SETTINGS -->
             <div id="form-module-Music"
-                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+                class="bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
 
                 <!-- YouTube OAuth Status -->
                 <div class="bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] space-y-2">

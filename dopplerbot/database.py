@@ -70,21 +70,6 @@ async def ensure_tables(db):
     # channel_id is the primary key (one row per channel): owner_id is the
     # current owner (changes on transfer) and original_owner_id never changes,
     # so ownership can be handed back if the creator rejoins later.
-    existing_columns = {row[1] async for row in await db.execute("PRAGMA table_info(temp_channels)")}
-    if existing_columns and "original_owner_id" not in existing_columns:
-        # Pre-migration schema (owner_id as PK, no original owner tracking).
-        # Temp channels are ephemeral session state — the real Discord channels
-        # are untouched, they just go "unmanaged" until recreated.
-        await db.execute("DROP TABLE temp_channels")
-
-    await db.execute("""
-        CREATE TABLE IF NOT EXISTS temp_channels (
-            channel_id INTEGER PRIMARY KEY,
-            owner_id INTEGER NOT NULL,
-            original_owner_id INTEGER NOT NULL
-        )
-    """)
-
     await db.commit()
 
 
@@ -135,6 +120,15 @@ LEGACY_SETTINGS_MOVES = [
 
     # Music
     ("Modules", "music_bots", "Plugins", "music"),
+
+    # Temporary voice channels
+    ("Voice", "main_voice_channel_id", "voice", "main_voice_channel_id"),
+    ("Voice", "category_id", "voice", "category_id"),
+    ("Voice", "voice_channel_name_prefix", "voice", "channel_name_prefix"),
+    ("Voice", "voice_enabled", "Plugins", "voice"),
+    # The module toggle carried a typo ("manger") and was never read by the
+    # loader, which used Voice/voice_enabled instead.
+    ("Modules", "voice_manger", "Plugins", "voice"),
 ]
 
 
@@ -144,6 +138,7 @@ LEGACY_SETTINGS_MOVES = [
 # dropped here, so this runs once and finds nothing on later startups.
 LEGACY_TABLE_MOVES = [
     ("music_bots", "music"),
+    ("temp_channels", "voice"),
 ]
 
 
@@ -274,13 +269,7 @@ async def init_db():
             # MAIN
             ("prefix", "+", "Main"),
 
-            # VOICEMANAGER
-            ("category_id", "0", "Voice"),
-            ("main_voice_channel_id", "0", "Voice"),
-            ("voice_channel_name_prefix", "🏠║", "Voice"),
-
             # MODULES
-            ("voice_manger", "true", "Modules"),
 
         ]
 
@@ -345,52 +334,3 @@ async def set_settings(key: str, value: str, category: str = "Main"):
             (category, key, value),
         )
         await db.commit()
-
-
-# ---> VOICE MANAGER
-# ADD TEMP CHANNEL
-# Only used for a brand-new channel, so the current and original owner are
-# the same person at this point.
-async def add_temp_channel(channel_id: int, owner_id: int):
-    async with _db_lock:
-        db = await _connect()
-        await db.execute(
-            "INSERT OR REPLACE INTO temp_channels (channel_id, owner_id, original_owner_id) VALUES (?, ?, ?)",
-            (channel_id, owner_id, owner_id),
-        )
-        await db.commit()
-
-
-# TRANSFER (OR RESTORE) OWNERSHIP OF AN EXISTING CHANNEL
-# Deliberately leaves original_owner_id untouched, so it can still be used later
-# to hand ownership back if the original creator rejoins.
-async def set_temp_channel_owner(channel_id: int, new_owner_id: int):
-    async with _db_lock:
-        db = await _connect()
-        await db.execute(
-            "UPDATE temp_channels SET owner_id = ? WHERE channel_id = ?",
-            (new_owner_id, channel_id),
-        )
-        await db.commit()
-
-
-# REMOVE TEMP CHANNEL
-async def remove_temp_channel(channel_id: int):
-    async with _db_lock:
-        db = await _connect()
-        await db.execute(
-            "DELETE FROM temp_channels WHERE channel_id = ?",
-            (channel_id,),
-        )
-        await db.commit()
-
-
-# GET ALL TEMP CHANNELS
-async def get_all_temp_channels() -> list[tuple[int, int, int]]:
-    async with _db_lock:
-        db = await _connect()
-        async with db.execute(
-            "SELECT channel_id, owner_id, original_owner_id FROM temp_channels"
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [tuple(row) for row in rows]

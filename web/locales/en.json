@@ -5,7 +5,7 @@
     "tabs": {
         "stats": "📊 Stats",
         "embed_builder": "🛠️ Embed Builder",
-        "modules": "🧩 Modules",
+        "music": "📻 Music",
         "plugins": "🧠 Plugins",
         "settings": "⚙️ Settings"
     },
@@ -33,24 +33,6 @@
             "bot": "Bot",
             "p_title": "Prewiev",
             "empty": "Add a card to see a preview..."
-        }
-    },
-    "modules": {
-        "title": "🧩 Modules",
-        "description": "Enable, disable, and configure specific bot modules.",
-        "tab2": "🔊 Voice Manager",
-        "tab3": "📻 Music",
-        "voice": {
-            "title": "Configuring Automatic Voice Channels",
-            "thumbler1_title": "Enable Voice Module",
-            "thumbler1_description": "Toggle dynamic voice channel creation on or off",
-            "field1_title": "Main Voice Channel ID",
-            "field1_description": "A room where, upon entering, the bot will create a private channel and move the user there.",
-            "field2_title": "Category ID for new rooms",
-            "field2_description": "The category in which temporary voice channels will be created.",
-            "field3_title": "Channel Name Prefix",
-            "field3_description": "Prepended to the member's display name for new temporary channels (e.g. 🏠║username).",
-            "save": "💾 Save settings"
         }
     },
     "settings": {
@@ -83,5 +65,8 @@
         "description": "Enable, configure and reload plugins. Reloading applies a plugin's new code without restarting the bot.",
         "rescan": "🔄 Rescan folder",
         "loading": "Loading plugins..."
+    },
+    "music": {
+        "description": "Worker bot accounts and YouTube playback. Enable or disable the module itself on the Plugins tab."
     }
 }

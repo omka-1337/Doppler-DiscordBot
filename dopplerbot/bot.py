@@ -19,13 +19,7 @@ STARTED_AT = datetime.now(timezone.utc)
 COG_EXTENSIONS = [
     "dopplerbot.cogs.cogmanager",
     "dopplerbot.cogs.web_command",
-    "dopplerbot.cogs.voice.VoiceManager",
 ]
-
-# Must stay in sync with MODULE_TOGGLE_MAP in web/app.py.
-MODULE_CONFIG = {
-    "dopplerbot.cogs.voice.VoiceManager": ("Voice", "voice_enabled"),
-}
 
 # LOGGING
 logging.basicConfig(
@@ -56,34 +50,11 @@ bot = commands.Bot(
     intents=intents
 )
 
-# Plugins are the way forward; the COG_EXTENSIONS above are the modules that
-# have not been migrated to the plugin API yet. Both run side by side so the
-# bot keeps working while modules move over one at a time.
+# Every feature is a plugin now; COG_EXTENSIONS holds only the bot's own
+# infrastructure, which is not optional and has nothing to configure.
 bot.plugins = PluginRegistry(bot)
 
 # ---------------------------------------------------------------------
-
-# RELOAD COG FROM WEB-PANEL
-async def handle_reload_cog(request):
-    data = await request.json()
-    cog_name = data.get("cog")
-    action = data.get("action")
-
-    try:
-        if action == "load":
-            if cog_name not in bot.extensions:
-                await bot.load_extension(cog_name)
-                logging.info(f"Loaded via Webhook: {cog_name}")
-
-        elif action == "unload":
-            if cog_name in bot.extensions:
-                await bot.unload_extension(cog_name)
-                logging.info(f"Unloaded via Webhook: {cog_name}")
-        return web.json_response({"status": "ok"})
-
-    except Exception as e:
-        logging.error(f"Error toggling {cog_name}: {e}")
-        return web.json_response({"status": "error", "message": str(e)}, status=500)
 
 # ---------------------------------------------------------------------
 
@@ -352,7 +323,6 @@ async def handle_plugin_settings(request):
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
-    app.router.add_post("/internal/toggle-cog", handle_reload_cog)
     app.router.add_get("/internal/music/bots", handle_music_list)
     app.router.add_post("/internal/music/add", handle_music_add)
     app.router.add_post("/internal/music/remove", handle_music_remove)
@@ -382,15 +352,6 @@ async def load_cogs(bot):
     logging.info("Start loading the cogs...")
 
     for cog_name in COG_EXTENSIONS:
-        if cog_name in MODULE_CONFIG:
-            category, key_name = MODULE_CONFIG[cog_name]
-            cat_settings = await get_settings_by_category(category)
-            is_enabled = cat_settings.get(key_name, "true").lower() == "true"
-
-            if not is_enabled:
-                logging.info(f"Skipped disabled cog: {cog_name}")
-                continue
-
         try:
             await bot.load_extension(cog_name)
             logging.info(f"Loaded: {cog_name}")

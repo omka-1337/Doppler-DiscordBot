@@ -1,24 +1,24 @@
 """
-Translator service: reads the saved provider preference from the settings
-table and performs the actual translation call, falling back to Google when
-DeepL isn't usable, and falling back further to a free/keyless library when
-no Google Cloud key is configured either.
+Translator service: performs the actual translation call, falling back to
+Google when DeepL isn't usable, and falling back further to a free/keyless
+library when no Google Cloud key is configured either.
 
 Selection logic:
-    1. translator_provider decides the preferred provider ("deepl" / "google").
-    2. DeepL is only used if translator_deepl_api_key is actually set;
-       otherwise we silently fall back to Google.
-    3. For Google: if translator_google_api_key is set, we use the official
-       Google Cloud Translate API. Otherwise we fall back to the free,
-       keyless `deep-translator` library.
+    1. `provider` decides the preferred provider ("deepl" / "google").
+    2. DeepL is only used if a DeepL key was actually passed in; otherwise we
+       silently fall back to Google.
+    3. For Google: with a Google Cloud key we use the official Cloud Translate
+       API, otherwise the free, keyless `deep-translator` library.
+
+Configuration is passed in by the caller rather than read from the database:
+a plugin reaches its settings only through its own scoped context.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
 
-import dopplerbot.database as database
-from utils.translator.LocaleMapping import to_deepl_lang, to_google_lang
+from .locale_mapping import to_deepl_lang, to_google_lang
 
 logger = logging.getLogger(__name__)
 
@@ -89,17 +89,21 @@ async def _translate_with_google_free(text: str, target_base_lang: str) -> Trans
     )
 
 
-async def translate(text: str, target_base_lang: str) -> TranslationResult:
+async def translate(
+    text: str,
+    target_base_lang: str,
+    *,
+    provider: str = "google",
+    deepl_api_key: str = "",
+    google_api_key: str = "",
+) -> TranslationResult:
     """
     Translates `text` into `target_base_lang` (our internal base language code,
-    see locale_mapping.get_base_lang), following the saved provider
+    see locale_mapping.get_base_lang), following the caller's provider
     preference and falling back to Google when needed.
     """
-    settings = await database.get_settings_by_category("Translator")
-
-    provider = settings.get("translator_provider", "google")
-    deepl_api_key = settings.get("translator_deepl_api_key", "") or None
-    google_api_key = settings.get("translator_google_api_key", "") or None
+    deepl_api_key = deepl_api_key or None
+    google_api_key = google_api_key or None
 
     effective_provider = provider
     if effective_provider == "deepl" and not deepl_api_key:

@@ -6,15 +6,45 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 
 - 🎵 **Music** — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
 - 🤖 **AI Chat** — conversational AI; pick a provider (Google Gemini, DeepSeek, or ChatGPT) from the dashboard, where the persona name, system prompt, language, tone, and provider API key are all configured.
-- 🌐 **Message Translation** — right-click any message → Apps → Translate. Supports DeepL and Google (official API or a free keyless fallback).
+- 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Supports DeepL and Google (official API or a free keyless fallback).
 - 🔊 **Temporary Voice Channels** — joining a configured "hub" channel automatically creates a private voice channel for the user, with a rename button.
 - 🛡️ **Moderation** — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
 - 🛠️ **Rich Embed Builder** — build Discord messages visually in the dashboard using Components V2 (independent cards, each with its own accent color and ordered text/image blocks), then send them with `/embed <name>`. Images can be linked by URL or uploaded directly.
 - 🔒 **Server Protect** — optional raid/alt mitigation. Checks every new member's account age on join (DMs the reason and kicks if too new; grants a role automatically otherwise), and detects join bursts — react with an admin-gated alert or fully automatic lockdown (revokes invites, rejects new joins for a while).
+- 🧠 **Plugins** — features can ship as self-contained plugins that are enabled, configured and reloaded from the dashboard. Reloading a plugin applies its new code *without restarting the bot*.
 - 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), per-module enable/disable toggles, and settings management for every feature above.
 - 🔐 **Dashboard Login** (optional) — gate the dashboard behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It switches itself on once a home server is set and a Client Secret is saved in Settings — the Client ID is detected automatically, and the login page shows you the exact redirect URI to register (with a copy button and a direct link to your app's OAuth2 page).
 
-Every module can be toggled on/off independently from the dashboard's Modules tab.
+Every module can be toggled on/off independently from the dashboard's Modules tab, and every plugin from its Plugins tab.
+
+## Plugins
+
+A plugin is a self-contained folder holding a `plugin.json` manifest and its Python code. Built-in plugins ship in `dopplerbot/plugins/builtin/`; anything installed at runtime lands in `plugins/` at the repo root, which is bind-mounted and ignored by git, so installed plugins survive an image rebuild.
+
+```
+plugins/my_plugin/
+├── plugin.json     # id, name, version, api_version, description, author, icon
+└── plugin.py       # a subclass of dopplerbot.plugins.api.Plugin
+```
+
+```python
+from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
+
+class MyPlugin(Plugin):
+    SETTINGS = (
+        PluginSetting("api_key", SettingType.SECRET, label="API key"),
+        PluginSetting("channel_id", SettingType.CHANNEL, default=0),
+    )
+
+    async def setup(self):
+        await self.ctx.add_cog(MyCog(self))
+```
+
+A plugin declares its settings in code and the dashboard generates the form from that declaration — there is no dashboard code to write per plugin. Those settings are namespaced to the plugin's id, so two plugins can both use a key like `channel_id` without colliding, and a plugin reads and writes only its own keys: it has no path through this API to the bot token, the session secret, or another plugin's settings. Reading or writing a key the plugin didn't declare is an error, which turns a typo into a visible failure instead of a setting that silently never applies.
+
+That last point is a namespace boundary, not a sandbox — a plugin is Python running in the bot's own process. **Installing a third-party plugin means running third-party code**, so only install plugins you trust.
+
+Cogs and persistent views registered through `self.ctx` are removed automatically when the plugin is unloaded, which is what makes the dashboard's **Reload** button able to swap a plugin's code in place while the bot stays connected.
 
 **Single-guild by design.** All settings are global, not per-server, so Doppler is meant to run one bot instance per Discord server. It auto-locks to the first server it's added to (stored as `home_guild_id` under Settings → Main) and automatically leaves any other server it's invited to, to prevent two servers from silently sharing one config.
 

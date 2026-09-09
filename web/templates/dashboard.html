@@ -47,6 +47,10 @@
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
                 {{ t.tabs.modules }}
             </button>
+            <button onclick="switchTab('plugins')" id="btn-plugins"
+                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
+                {{ t.tabs.plugins }}
+            </button>
             <button onclick="switchTab('settings')" id="btn-settings"
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
                 {{ t.tabs.settings }}
@@ -233,10 +237,6 @@
                     <button onclick="switchModuleCategory('Moderation')" id="mod-btn-Moderation"
                         class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
                         {{ t.modules.tab4 }}
-                    </button>
-                    <button onclick="switchModuleCategory('Translator')" id="mod-btn-Translator"
-                        class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
-                        📑 Translator
                     </button>
                     <button onclick="switchModuleCategory('ServerProtect')" id="mod-btn-ServerProtect"
                         class="module-cat-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]">
@@ -596,82 +596,6 @@
                 </div>
             </form>
 
-            <!-- MODULE: TRANSLATOR SETTINGS -->
-            <form id="form-module-Translator" onsubmit="saveSettings(event, 'Translator')"
-                class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
-
-                <!-- Module Enable/Disable Toggle Row -->
-                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-2">
-                    <div>
-                        <span class="block text-xs font-bold text-gray-300 uppercase">Translator Module Status</span>
-                        <span class="text-[10px] text-gray-400">Enable or disable message translation (right-click →
-                            Apps → Translate)</span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="chk_translator_enabled" {% if
-                            settings_modules.get('translator', 'true' )=='true' %}checked{% endif %}
-                            onchange="toggleModule('translator', this.checked)" class="sr-only peer">
-                        <div
-                            class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
-                        </div>
-                    </label>
-                </div>
-
-                <h3
-                    class="text-md font-bold text-gray-200 border-b border-[#3f4147] pb-2 uppercase text-xs tracking-wider">
-                    Translation Provider</h3>
-
-                <!-- Provider Dropdown -->
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Preferred Provider</label>
-                    <select name="translator_provider" id="set_translator_provider"
-                        onchange="toggleTranslatorProviderFields()"
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                        <option value="google" {% if settings_translator.get('translator_provider', 'google' )=='google'
-                            %}selected{% endif %}>Google Translate</option>
-                        <option value="deepl" {% if settings_translator.get('translator_provider')=='deepl' %}selected{%
-                            endif %}>DeepL</option>
-                    </select>
-                    <p class="text-[11px] text-gray-400 mt-1">If DeepL is selected but no API key is set below, the bot
-                        automatically falls back to Google.</p>
-                </div>
-
-                <!-- DeepL API Key -->
-                <div id="translator-deepl-key-block">
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">DeepL API Key</label>
-                    <div class="relative group">
-                        <input type="password" name="translator_deepl_api_key" id="set_translator_deepl_api_key"
-                            value="{{ settings_translator.get('translator_deepl_api_key', '') }}"
-                            placeholder="Enter DeepL API key..." onmouseenter="this.type='text'"
-                            onmouseleave="this.type='password'" autocomplete="off"
-                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
-                    </div>
-                    <p class="text-[11px] text-gray-400 mt-1">Leave empty to disable DeepL (falls back to Google).</p>
-                </div>
-
-                <!-- Google Cloud API Key -->
-                <div id="translator-google-key-block">
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Google Cloud Translate API
-                        Key</label>
-                    <div class="relative group">
-                        <input type="password" name="translator_google_api_key" id="set_translator_google_api_key"
-                            value="{{ settings_translator.get('translator_google_api_key', '') }}"
-                            placeholder="Enter Google Cloud API key..." onmouseenter="this.type='text'"
-                            onmouseleave="this.type='password'" autocomplete="off"
-                            class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition group-hover:border-indigo-500/60">
-                    </div>
-                    <p class="text-[11px] text-gray-400 mt-1">Leave empty to use the free, keyless translation library
-                        instead.</p>
-                </div>
-
-                <div class="pt-2">
-                    <button type="submit"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm flex items-center gap-2">
-                        Save Module Settings
-                    </button>
-                </div>
-            </form>
-
             <!-- MODULE: SERVER PROTECT SETTINGS -->
             <form id="form-module-ServerProtect" onsubmit="saveSettings(event, 'ServerProtect')"
                 class="module-form hidden bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
@@ -799,6 +723,27 @@
         </div>
 
         <!-- 3. TAB: SETTINGS -->
+        <div id="tab-plugins" class="tab-content hidden space-y-6">
+
+            <div
+                class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        {{ t.tabs.plugins }}
+                    </h2>
+                    <p class="text-xs text-gray-400 mt-1">{{ t.plugins.description }}</p>
+                </div>
+                <button onclick="rescanPlugins()"
+                    class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 font-semibold px-4 py-2 rounded transition text-xs">
+                    {{ t.plugins.rescan }}
+                </button>
+            </div>
+
+            <div id="pluginsList" class="space-y-4">
+                <p class="text-xs text-gray-400">{{ t.plugins.loading }}</p>
+            </div>
+        </div>
+
         <div id="tab-settings" class="tab-content hidden space-y-6">
 
             <!-- Category Selector Header -->

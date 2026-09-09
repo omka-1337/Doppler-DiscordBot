@@ -32,13 +32,37 @@ async def close_db():
 
 # FORCE TABLE CREATION
 async def ensure_tables(db):
+    # Settings are keyed by (category, key), where category doubles as the
+    # plugin's namespace — a plugin declaring a common key like "channel_id"
+    # must not collide with another plugin doing the same.
     await db.execute("""
         CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
+            category TEXT NOT NULL DEFAULT 'Main',
+            key TEXT NOT NULL,
             value TEXT NOT NULL,
-            category TEXT NOT NULL DEFAULT 'Main'
+            PRIMARY KEY (category, key)
         )
     """)
+
+    # Migrate the pre-plugin schema (key alone as PRIMARY KEY). Unlike the
+    # ephemeral temp_channels table this holds real configuration, so the rows
+    # are copied across rather than recreated.
+    pk_columns = [row[1] async for row in await db.execute("PRAGMA table_info(settings)") if row[5]]
+    if pk_columns == ["key"]:
+        await db.execute("""
+            CREATE TABLE settings_migrated (
+                category TEXT NOT NULL DEFAULT 'Main',
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (category, key)
+            )
+        """)
+        await db.execute(
+            "INSERT INTO settings_migrated (category, key, value) SELECT category, key, value FROM settings"
+        )
+        await db.execute("DROP TABLE settings")
+        await db.execute("ALTER TABLE settings_migrated RENAME TO settings")
+        logging.info("Migrated the settings table to a (category, key) primary key.")
 
     # TABLE / TEMPORARY VOICE CHANNELS
     # channel_id is the primary key (one row per channel): owner_id is the
@@ -72,10 +96,51 @@ async def ensure_tables(db):
     await db.commit()
 
 
+# LEGACY SETTINGS MIGRATION
+# As each built-in module moves to the plugin API its settings move with it,
+# from the core's own category into the plugin's namespace (the plugin id).
+# Each entry is (old_category, old_key, new_category, new_key); a row is only
+# moved if the plugin hasn't already got a value there, so this is safe to run
+# on every startup and does nothing once the move has happened.
+LEGACY_SETTINGS_MOVES = [
+    ("Translator", "translator_provider", "translator", "provider"),
+    ("Translator", "translator_deepl_api_key", "translator", "deepl_api_key"),
+    ("Translator", "translator_google_api_key", "translator", "google_api_key"),
+    ("Modules", "translator", "Plugins", "translator"),
+]
+
+
+async def migrate_legacy_settings(db):
+    moved = 0
+    for old_cat, old_key, new_cat, new_key in LEGACY_SETTINGS_MOVES:
+        async with db.execute(
+            "SELECT value FROM settings WHERE category = ? AND key = ?", (old_cat, old_key)
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            continue
+
+        await db.execute(
+            """
+            INSERT INTO settings (category, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(category, key) DO NOTHING
+            """,
+            (new_cat, new_key, row[0]),
+        )
+        await db.execute("DELETE FROM settings WHERE category = ? AND key = ?", (old_cat, old_key))
+        moved += 1
+
+    if moved:
+        await db.commit()
+        logging.info(f"Moved {moved} legacy setting(s) into their plugin namespaces.")
+
+
 # INIT DB
 async def init_db():
     async with _db_lock:
         db = await _connect()
+        await migrate_legacy_settings(db)
 
         default_settings = [
             # MAIN
@@ -102,11 +167,6 @@ async def init_db():
             ("mod_log_channel_id", "0", "Moderation"),
             ("mod_log_enabled", "false", "Moderation"),
 
-            # TRANSLATOR
-            ("translator_provider", "google", "Translator"),
-            ("translator_deepl_api_key", "", "Translator"),
-            ("translator_google_api_key", "", "Translator"),
-
             # SERVER PROTECT
             ("min_account_age_days", "7", "ServerProtect"),
             ("verified_role_id", "0", "ServerProtect"),
@@ -125,7 +185,6 @@ async def init_db():
             ("voice_manger", "true", "Modules"),
             ("music_bots", "true", "Modules"),
             ("moderation", "true", "Modules"),
-            ("translator", "true", "Modules"),
             # Off by default: needs DISCORD_CLIENT_ID/SECRET + DASHBOARD_URL configured first.
             ("server_protect", "false", "Modules"),
 
@@ -138,9 +197,9 @@ async def init_db():
             try:
                 await db.execute(
                     """
-                    INSERT INTO settings (key, value, category) 
-                    VALUES (?, ?, ?) 
-                    ON CONFLICT(key) DO NOTHING
+                    INSERT INTO settings (key, value, category)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(category, key) DO NOTHING
                     """,
                     (key, val, cat),
                 )
@@ -152,10 +211,18 @@ async def init_db():
 
 # ---> SETTINGS
 # GETTING SETTINGS
-async def get_settings(key: str, default: str | None = None) -> str | None:
+# category is optional for backwards compatibility: without it the first match
+# for the key is returned regardless of namespace, which is only safe for the
+# handful of globally-unique core keys (prefix, home_guild_id, module toggles).
+async def get_settings(key: str, default: str | None = None, category: str | None = None) -> str | None:
+    if category is None:
+        query, params = "SELECT value FROM settings WHERE key = ? LIMIT 1", (key,)
+    else:
+        query, params = "SELECT value FROM settings WHERE category = ? AND key = ?", (category, key)
+
     async with _db_lock:
         db = await _connect()
-        async with db.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cursor:
+        async with db.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else default
 
@@ -178,13 +245,12 @@ async def set_settings(key: str, value: str, category: str = "Main"):
         db = await _connect()
         await db.execute(
             """
-            INSERT INTO settings (key, value, category) 
-            VALUES (?, ?, ?) 
-            ON CONFLICT(key) DO UPDATE SET 
-                value = excluded.value, 
-                category = excluded.category
+            INSERT INTO settings (category, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(category, key) DO UPDATE SET
+                value = excluded.value
             """,
-            (key, value, category),
+            (category, key, value),
         )
         await db.commit()
 

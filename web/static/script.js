@@ -530,18 +530,6 @@ async function saveYouTubeOAuthToken() {
 // ---------------------------------------------------------------------
 
 // Call the function as soon as the page loads
-// Show only the API key field relevant to the currently selected Translator provider
-function toggleTranslatorProviderFields() {
-    const select = document.getElementById('set_translator_provider');
-    const deeplBlock = document.getElementById('translator-deepl-key-block');
-    const googleBlock = document.getElementById('translator-google-key-block');
-    if (!select || !deeplBlock || !googleBlock) return;
-
-    const isDeepl = select.value === 'deepl';
-    deeplBlock.classList.toggle('hidden', !isDeepl);
-    googleBlock.classList.toggle('hidden', isDeepl);
-}
-
 // Show only the API key field relevant to the currently selected AI provider
 function toggleAiProviderFields() {
     const select = document.getElementById('set_ai_provider');
@@ -698,7 +686,6 @@ function connectLogsWebSocket() {
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
     loadMusicBots();
-    toggleTranslatorProviderFields();
     toggleAiProviderFields();
     loadYouTubeOAuthStatus();
     initStats();
@@ -797,6 +784,10 @@ function switchTab(tabName) {
     const activeBtn = document.getElementById(`btn-${tabName}`);
     if (activeBtn) {
         activeBtn.className = 'tab-btn px-4 py-2 rounded text-sm font-semibold transition bg-indigo-600 text-white';
+    }
+
+    if (tabName === 'plugins') {
+        loadPlugins();
     }
 }
 
@@ -1001,4 +992,236 @@ async function handleToggle(event, botId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bot_rowid: botId })
     });
+}
+// ---------------------------------------------------------------------
+// PLUGINS
+//
+// Nothing here knows about any particular plugin: each one declares its
+// settings in its own Python code, the bot serves that schema, and the cards
+// and forms below are generated from it.
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+// One form row, rendered according to the field's declared type.
+function renderPluginField(pluginId, field, value) {
+    const inputId = `plg_${pluginId}_${field.key}`;
+    const base = 'w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition';
+    const label = `<label class="block text-xs font-bold text-gray-400 uppercase mb-1">${escapeHtml(field.label)}</label>`;
+    const hint = field.description
+        ? `<p class="text-[11px] text-gray-400 mt-1">${escapeHtml(field.description)}</p>`
+        : '';
+
+    let input;
+    switch (field.type) {
+        case 'bool':
+            return `
+                <div class="flex items-center justify-between bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147]">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-300 uppercase">${escapeHtml(field.label)}</span>
+                        ${field.description ? `<span class="text-[10px] text-gray-400">${escapeHtml(field.description)}</span>` : ''}
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="bool"
+                            ${value === true || value === 'true' ? 'checked' : ''} class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>`;
+
+        case 'select':
+            input = `<select id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="select" class="${base}">
+                ${field.choices.map(c =>
+                    `<option value="${escapeHtml(c.value)}" ${String(value) === c.value ? 'selected' : ''}>${escapeHtml(c.label)}</option>`
+                ).join('')}
+            </select>`;
+            break;
+
+        case 'text':
+            input = `<textarea id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="text" rows="4" class="${base}">${escapeHtml(value)}</textarea>`;
+            break;
+
+        case 'secret':
+            // Same reveal-on-hover treatment the other API key fields use.
+            input = `<input type="password" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="secret"
+                value="${escapeHtml(value)}" autocomplete="off"
+                onmouseenter="this.type='text'" onmouseleave="this.type='password'"
+                class="${base} font-mono">`;
+            break;
+
+        case 'slider':
+            input = `<div class="flex items-center gap-3">
+                <input type="range" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="slider"
+                    min="${field.min}" max="${field.max}" step="${field.step ?? 0.1}" value="${escapeHtml(value)}"
+                    oninput="document.getElementById('${inputId}_out').textContent = this.value"
+                    class="flex-1 accent-indigo-600">
+                <span id="${inputId}_out" class="text-xs text-gray-300 font-mono w-10 text-right">${escapeHtml(value)}</span>
+            </div>`;
+            break;
+
+        case 'int':
+        case 'float':
+        case 'channel':
+        case 'role':
+            input = `<input type="number" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="${field.type}"
+                value="${escapeHtml(value)}" ${field.type === 'float' ? 'step="any"' : ''}
+                ${field.min !== null && field.min !== undefined ? `min="${field.min}"` : ''}
+                ${field.max !== null && field.max !== undefined ? `max="${field.max}"` : ''}
+                class="${base} font-mono">`;
+            break;
+
+        default:
+            input = `<input type="text" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="string"
+                value="${escapeHtml(value)}" class="${base}">`;
+    }
+
+    return `<div>${label}${input}${hint}</div>`;
+}
+
+function renderPluginCard(plugin) {
+    const values = plugin.values || {};
+    const statusText = plugin.running
+        ? '<span class="text-[10px] text-green-400 font-semibold">● RUNNING</span>'
+        : (plugin.enabled
+            ? '<span class="text-[10px] text-red-400 font-semibold">● FAILED</span>'
+            : '<span class="text-[10px] text-gray-500 font-semibold">● DISABLED</span>');
+
+    const error = plugin.error
+        ? `<p class="text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2 font-mono">${escapeHtml(plugin.error)}</p>`
+        : '';
+
+    // Settings are only readable while the plugin is running, since the schema
+    // lives in the plugin's own code.
+    const fields = (plugin.settings_schema || [])
+        .map(f => renderPluginField(plugin.id, f, values[f.key]))
+        .join('');
+
+    const form = plugin.running && fields
+        ? `<div class="space-y-4 pt-4 mt-4 border-t border-[#3f4147]">
+               ${fields}
+               <button onclick="savePluginSettings('${plugin.id}')"
+                   class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm">
+                   💾 Save settings
+               </button>
+           </div>`
+        : '';
+
+    return `
+    <div class="bg-[#2b2d31] p-5 rounded-lg border border-[#3f4147] shadow-lg">
+        <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+                <span class="text-2xl leading-none">${escapeHtml(plugin.icon)}</span>
+                <div>
+                    <h3 class="text-white font-bold flex items-center gap-2">
+                        ${escapeHtml(plugin.name)}
+                        <span class="text-[10px] text-gray-500 font-mono">v${escapeHtml(plugin.version)}</span>
+                        ${statusText}
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1">${escapeHtml(plugin.description)}</p>
+                    <p class="text-[10px] text-gray-500 mt-1 font-mono">
+                        ${escapeHtml(plugin.id)}${plugin.author ? ' · ' + escapeHtml(plugin.author) : ''} · ${escapeHtml(plugin.installed_from)}
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+                <button onclick="reloadPlugin('${plugin.id}')" title="Reload this plugin's code without restarting the bot"
+                    class="bg-[#1e1f22] hover:bg-[#35373c] border border-[#3f4147] text-gray-300 px-3 py-1.5 rounded transition text-xs font-semibold">
+                    ♻️ Reload
+                </button>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" ${plugin.enabled ? 'checked' : ''}
+                        onchange="togglePlugin('${plugin.id}', this.checked)" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+            </div>
+        </div>
+        ${error}
+        ${form}
+    </div>`;
+}
+
+async function loadPlugins() {
+    const list = document.getElementById('pluginsList');
+    if (!list) return;
+
+    try {
+        const res = await fetch('/api/plugins');
+        const data = await res.json();
+
+        if (!res.ok) {
+            list.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the bot.')}</p>`;
+            return;
+        }
+
+        const plugins = data.plugins || [];
+        list.innerHTML = plugins.length
+            ? plugins.map(renderPluginCard).join('')
+            : '<p class="text-xs text-gray-400">No plugins installed yet.</p>';
+    } catch (e) {
+        list.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}
+
+async function rescanPlugins() {
+    try {
+        await fetch('/api/plugins/rescan', { method: 'POST' });
+    } catch (e) {
+        // loadPlugins() reports the failure to the user.
+    }
+    loadPlugins();
+}
+
+async function togglePlugin(pluginId, enabled) {
+    try {
+        const res = await fetch('/api/plugins/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId, enabled })
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            alert(`Failed to ${enabled ? 'enable' : 'disable'} ${pluginId}: ${data.detail || 'unknown error'}`);
+        }
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPlugins();
+}
+
+async function reloadPlugin(pluginId) {
+    try {
+        const res = await fetch('/api/plugins/reload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId })
+        });
+        const data = await res.json();
+        alert(res.ok ? `${pluginId} reloaded.` : `Reload failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
+    loadPlugins();
+}
+
+async function savePluginSettings(pluginId) {
+    const values = {};
+    document.querySelectorAll(`[id^="plg_${pluginId}_"]`).forEach(el => {
+        const key = el.dataset.key;
+        if (!key) return;
+        values[key] = el.dataset.type === 'bool' ? el.checked : el.value;
+    });
+
+    try {
+        const res = await fetch('/api/plugins/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin: pluginId, values })
+        });
+        const data = await res.json();
+        alert(res.ok ? 'Settings saved.' : `Save failed: ${data.detail || 'unknown error'}`);
+    } catch (e) {
+        alert('Error connecting to the server.');
+    }
 }

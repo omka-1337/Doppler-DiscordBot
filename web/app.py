@@ -189,7 +189,6 @@ async def get_dashboard(request: Request):
     settings_voice = await get_settings_by_category("Voice")
     settings_modules = await get_settings_by_category("Modules")
     settings_moderation = await get_settings_by_category("Moderation")
-    settings_translator = await get_settings_by_category("Translator")
     settings_serverprotect = await get_settings_by_category("ServerProtect")
 
     t = get_translations("en")
@@ -205,7 +204,6 @@ async def get_dashboard(request: Request):
             "settings_voice": settings_voice,
             "settings_modules": settings_modules,
             "settings_moderation": settings_moderation,
-            "settings_translator": settings_translator,
             "settings_serverprotect": settings_serverprotect,
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
@@ -326,7 +324,6 @@ MODULE_TOGGLE_MAP = {
     "voice": ("dopplerbot.cogs.voice.VoiceManager", "Voice", "voice_enabled"),
     "music": ("dopplerbot.cogs.music.MusicBotsManager", "Modules", "music_bots"),
     "moderation": ("dopplerbot.cogs.moderation.ModerationCommands", "Modules", "moderation"),
-    "translator": ("dopplerbot.cogs.Translator", "Modules", "translator"),
     "serverprotect": ("dopplerbot.cogs.serverprotect.ServerProtect", "Modules", "server_protect"),
 }
 
@@ -357,6 +354,80 @@ async def toggle_module(payload: ModuleTogglePayload):
         print(f"Failed to notify bot container: {e}")
 
     return JSONResponse({"status": "ok", "module_notified": notified})
+
+# ------------------------------PLUGINS--------------------------------
+
+# The bot process owns the plugin registry -- it is the one that imports the
+# code and holds the running instances -- so the dashboard only proxies to it.
+BOT_INTERNAL_API = "http://doppler_discord_bot:8001"
+
+
+async def _call_bot(method: str, path: str, payload: dict | None = None) -> dict:
+    """Call the bot's internal API, turning transport errors into HTTP 503."""
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(f"{BOT_INTERNAL_API}{path}", timeout=10.0)
+            else:
+                response = await client.post(f"{BOT_INTERNAL_API}{path}", json=payload or {}, timeout=15.0)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Bot is not reachable: {e}") from e
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("message", response.text)
+        except Exception:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    return response.json()
+
+
+class PluginTogglePayload(BaseModel):
+    plugin: str
+    enabled: bool
+
+
+class PluginActionPayload(BaseModel):
+    plugin: str
+
+
+class PluginSettingsPayload(BaseModel):
+    plugin: str
+    values: dict
+
+
+@app.get("/api/plugins")
+async def list_plugins():
+    return JSONResponse(await _call_bot("GET", "/internal/plugins"))
+
+
+@app.post("/api/plugins/rescan")
+async def rescan_plugins():
+    """Re-scan the plugins directory, e.g. after a plugin was added on disk."""
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/rescan"))
+
+
+@app.post("/api/plugins/toggle")
+async def toggle_plugin(payload: PluginTogglePayload):
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/plugins/toggle",
+        {"plugin": payload.plugin, "enabled": payload.enabled},
+    ))
+
+
+@app.post("/api/plugins/reload")
+async def reload_plugin(payload: PluginActionPayload):
+    """Swap a plugin's code in place, without restarting the bot."""
+    return JSONResponse(await _call_bot("POST", "/internal/plugins/reload", {"plugin": payload.plugin}))
+
+
+@app.post("/api/plugins/settings")
+async def save_plugin_settings(payload: PluginSettingsPayload):
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/plugins/settings",
+        {"plugin": payload.plugin, "values": payload.values},
+    ))
 
 # ----------------------------MUSIC BOTS-------------------------------
 

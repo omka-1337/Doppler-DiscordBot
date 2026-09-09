@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
 from dopplerbot.database import init_db, get_settings, set_settings, get_settings_by_category, close_db, get_music_bot
+from dopplerbot.plugins import PluginRegistry
 
 load_dotenv()
 
@@ -18,7 +19,6 @@ COG_EXTENSIONS = [
     "dopplerbot.cogs.cogmanager",
     "dopplerbot.cogs.embed",
     "dopplerbot.cogs.web_command",
-    "dopplerbot.cogs.Translator",
     "dopplerbot.cogs.voice.VoiceManager",
     "dopplerbot.cogs.music.MusicBotsManager",
     "dopplerbot.cogs.music.MusicCommands",
@@ -33,7 +33,6 @@ MODULE_CONFIG = {
     "dopplerbot.cogs.voice.VoiceManager": ("Voice", "voice_enabled"),
     "dopplerbot.cogs.music.MusicBotsManager": ("Modules", "music_bots"),
     "dopplerbot.cogs.moderation.ModerationCommands": ("Modules", "moderation"),
-    "dopplerbot.cogs.Translator": ("Modules", "translator"),
     "dopplerbot.cogs.serverprotect.ServerProtect": ("Modules", "server_protect"),
 }
 
@@ -65,6 +64,11 @@ bot = commands.Bot(
     command_prefix=get_prefix,
     intents=intents
 )
+
+# Plugins are the way forward; the COG_EXTENSIONS above are the modules that
+# have not been migrated to the plugin API yet. Both run side by side so the
+# bot keeps working while modules move over one at a time.
+bot.plugins = PluginRegistry(bot)
 
 # ---------------------------------------------------------------------
 
@@ -171,6 +175,78 @@ async def handle_check_admin(request):
 
 # ---------------------------------------------------------------------
 
+# PLUGIN MANAGEMENT FROM WEB-PANEL
+# The dashboard's plugin page is the only way plugins are turned on, off or
+# reloaded; reloading swaps a plugin's code in place, without restarting the bot.
+async def handle_list_plugins(request):
+    return web.json_response({"plugins": await bot.plugins.describe()})
+
+
+async def handle_rescan_plugins(request):
+    """Pick up plugins added on disk (e.g. just installed from the panel)."""
+    bot.plugins.discover()
+    return web.json_response({"status": "ok", "plugins": await bot.plugins.describe()})
+
+
+async def handle_toggle_plugin(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+    enabled = bool(data.get("enabled"))
+
+    if plugin_id not in bot.plugins.manifests:
+        return web.json_response({"status": "error", "message": "Unknown plugin"}, status=404)
+
+    ok = await bot.plugins.set_enabled(plugin_id, enabled)
+    await sync_commands()
+
+    if not ok:
+        return web.json_response(
+            {"status": "error", "message": bot.plugins.errors.get(plugin_id, "Failed to load")},
+            status=500,
+        )
+    return web.json_response({"status": "ok"})
+
+
+async def handle_reload_plugin(request):
+    data = await request.json()
+    plugin_id = data.get("plugin")
+
+    if plugin_id not in bot.plugins.manifests:
+        return web.json_response({"status": "error", "message": "Unknown plugin"}, status=404)
+
+    ok = await bot.plugins.reload(plugin_id)
+    await sync_commands()
+
+    if not ok:
+        return web.json_response(
+            {"status": "error", "message": bot.plugins.errors.get(plugin_id, "Reload failed")},
+            status=500,
+        )
+    return web.json_response({"status": "ok"})
+
+
+async def handle_plugin_settings(request):
+    """Save a running plugin's settings, validated against its declared schema."""
+    data = await request.json()
+    plugin_id = data.get("plugin")
+    values = data.get("values") or {}
+
+    entry = bot.plugins.loaded.get(plugin_id)
+    if entry is None:
+        return web.json_response(
+            {"status": "error", "message": "Plugin is not running"}, status=400
+        )
+
+    try:
+        for key, value in values.items():
+            await entry.context.settings.set(key, value)
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=400)
+
+    return web.json_response({"status": "ok"})
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
@@ -178,6 +254,11 @@ async def start_internal_api():
     app.router.add_post("/internal/toggle-music-bot", handle_toggle_music_bot)
     app.router.add_get("/internal/stats", handle_stats)
     app.router.add_post("/internal/check-admin", handle_check_admin)
+    app.router.add_get("/internal/plugins", handle_list_plugins)
+    app.router.add_post("/internal/plugins/rescan", handle_rescan_plugins)
+    app.router.add_post("/internal/plugins/toggle", handle_toggle_plugin)
+    app.router.add_post("/internal/plugins/reload", handle_reload_plugin)
+    app.router.add_post("/internal/plugins/settings", handle_plugin_settings)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
     # stats tab) — per-request access logs here are just noise in latest.log.
     runner = web.AppRunner(app, access_log=None)
@@ -242,20 +323,29 @@ async def enforce_home_guild():
 
 # ---------------------------------------------------------------------
 
+# SLASH COMMAND SYNC
+# Also called after a plugin is enabled or reloaded, so its commands appear or
+# disappear without waiting for a restart.
+async def sync_commands() -> int:
+    if not bot.guilds:
+        logging.warning("Bot is not in any guild, slash commands not synced.")
+        return 0
+
+    guild = bot.guilds[0]
+    bot.tree.copy_global_to(guild=guild)
+    synced = await bot.tree.sync(guild=guild)
+    logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
+    return len(synced)
+
+# ---------------------------------------------------------------------
+
 # EVENTS
 @bot.event
 async def on_ready():
     logging.info(f"Logged in as {bot.user}")
 
     await enforce_home_guild()
-
-    if bot.guilds:
-        guild = bot.guilds[0]
-        bot.tree.copy_global_to(guild=guild)
-        synced = await bot.tree.sync(guild=guild)
-        logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
-    else:
-        logging.warning("Bot is not in any guild, slash commands not synced.")
+    await sync_commands()
 
 # ---------------------------------------------------------------------
 
@@ -303,6 +393,7 @@ async def main():
 
         async with bot:
             await load_cogs(bot)
+            await bot.plugins.load_all()
             await bot.start(TOKEN)
 
     finally:

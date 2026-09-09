@@ -486,6 +486,11 @@ async def sync_commands() -> int:
         return 0
 
     guild = bot.guilds[0]
+    # copy_global_to() merges the global commands into whatever the guild copy
+    # already holds, so a command whose plugin has been unloaded would stay
+    # there and be re-uploaded on every sync. Clearing first makes the guild
+    # copy an exact mirror of what is currently loaded.
+    bot.tree.clear_commands(guild=guild)
     bot.tree.copy_global_to(guild=guild)
     synced = await bot.tree.sync(guild=guild)
     logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")

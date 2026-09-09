@@ -50,6 +50,42 @@ That last point is a namespace boundary, not a sandbox — a plugin is Python ru
 
 Cogs and persistent views registered through `self.ctx` are removed automatically when the plugin is unloaded, which is what makes the dashboard's **Reload** button able to swap a plugin's code in place while the bot stays connected.
 
+### Sidecar containers
+
+A plugin that needs a service of its own — the music plugin needs Lavalink —
+declares it in its manifest:
+
+```json
+"services": [
+  {
+    "name": "lavalink",
+    "image": "ghcr.io/lavalink-devs/lavalink:4",
+    "port": 2333,
+    "memory_mb": 700,
+    "env_from_settings": { "LAVALINK_PASSWORD": "lavalink_password" },
+    "files": { "lavalink.yml": "/opt/Lavalink/application.yml" }
+  }
+]
+```
+
+`await self.ctx.services.start("lavalink")` then brings it up and returns its
+address. A separate `broker` container is the only part of the stack with
+access to the Docker socket; **the bot deliberately has none**, because the bot
+is where plugin code runs, and the Docker socket is equivalent to root on the
+host.
+
+The broker reads the manifests itself, from a read-only mount of the project,
+and the bot can only name a service — never describe one. Everything about the
+container comes from the manifest as the broker read it: the image (which must
+pin a tag or digest), a memory cap, no published host ports, no capabilities,
+`no-new-privileges`, and read-only file mounts that may only come from inside
+the plugin's own folder. The one thing a plugin fills in is the *values* of
+environment variables its manifest already declared under `env_from_settings`.
+
+This bounds the damage; it does not make untrusted plugins safe. A plugin's
+Python still runs inside the bot's process. What it buys is that "this plugin
+needs a container" no longer means "this plugin gets root on the host".
+
 **Single-guild by design.** All settings are global, not per-server, so Doppler is meant to run one bot instance per Discord server. It auto-locks to the first server it's added to (stored as `home_guild_id` under Settings → Main) and automatically leaves any other server it's invited to, to prevent two servers from silently sharing one config.
 
 ## Requirements

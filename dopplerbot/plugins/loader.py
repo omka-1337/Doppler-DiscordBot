@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dopplerbot.database import get_settings_by_category, set_settings
-from dopplerbot.plugins.api import Plugin, PluginContext
+from dopplerbot.plugins.api import Plugin, PluginContext, ServiceUnavailable
 from dopplerbot.plugins.manifest import (
     PLUGIN_PACKAGE,
     PluginManifest,
@@ -173,7 +173,9 @@ class PluginRegistry:
         await set_settings(plugin_id, "true" if enabled else "false", ENABLED_CATEGORY)
         if enabled:
             return await self.load(plugin_id)
-        await self.unload(plugin_id)
+        # Turning a plugin off should also take its sidecar containers down;
+        # a reload should not, or every reload would restart them.
+        await self.unload(plugin_id, stop_services=True)
         return True
 
     # ---------------------------------------------------------------- lifecycle
@@ -215,11 +217,24 @@ class PluginRegistry:
         log.info("Loaded plugin: %s v%s", manifest.name, manifest.version)
         return True
 
-    async def unload(self, plugin_id: str) -> bool:
-        """Stop one plugin and remove everything it registered."""
+    async def unload(self, plugin_id: str, stop_services: bool = False) -> bool:
+        """Stop one plugin and remove everything it registered.
+
+        `stop_services` also takes down the plugin's sidecar containers. It is
+        off for reloads, so swapping a plugin's code doesn't bounce a service
+        that takes a while to come back.
+        """
         entry = self.loaded.pop(plugin_id, None)
         if entry is None:
             return False
+
+        if stop_services and entry.manifest.services:
+            try:
+                stopped = await entry.context.services.stop()
+                if stopped:
+                    log.info("Stopped sidecar service(s) for %r: %s", plugin_id, ", ".join(stopped))
+            except ServiceUnavailable as e:
+                log.warning("Could not stop %r's services: %s", plugin_id, e)
 
         try:
             await entry.instance.teardown()
@@ -272,6 +287,7 @@ class PluginRegistry:
             schema = entry.context.settings.schema if entry else []
             out.append({
                 **manifest.to_dict(),
+                "services": [service.to_dict() for service in manifest.services],
                 "installed_from": "builtin" if manifest.path and manifest.path.parent == BUILTIN_ROOT else "installed",
                 "enabled": await self.is_enabled(plugin_id),
                 "running": entry is not None,

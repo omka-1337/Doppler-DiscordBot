@@ -23,7 +23,9 @@ to. The API's job is to make sure a well-behaved plugin never has a reason to
 go looking. Treat installing a third-party plugin as running third-party code.
 """
 
+import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -31,10 +33,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 import discord
+import httpx
 
 from dopplerbot.database import SAVEDATA_DIR, get_settings, get_settings_by_category, set_settings
 from dopplerbot.plugins.db import PluginDatabase
-from dopplerbot.plugins.manifest import PluginManifest
+from dopplerbot.plugins.manifest import PluginManifest, ServiceSpec
 
 if TYPE_CHECKING:
     from discord.ext import commands
@@ -191,6 +194,106 @@ class ScopedSettings:
         }
 
 
+# The broker is the only component that talks to Docker. Plugins reach it only
+# through this class, and it will only ever name a service the plugin's own
+# manifest declares -- the container's image, mounts and privileges come from
+# the manifest as the broker reads it, never from anything sent here.
+BROKER_URL = os.getenv("BROKER_URL", "http://doppler_service_broker:8002")
+
+
+class ServiceUnavailable(Exception):
+    """Raised when the broker cannot be reached or refuses a request."""
+
+
+class ServiceManager:
+    """A plugin's view of its declared sidecar containers."""
+
+    def __init__(self, manifest: PluginManifest, settings: "ScopedSettings", log: logging.Logger):
+        self._manifest = manifest
+        self._settings = settings
+        self._log = log
+
+    def _spec(self, name: str) -> ServiceSpec:
+        for service in self._manifest.services:
+            if service.name == name:
+                return service
+        raise ServiceUnavailable(
+            f"{self._manifest.id!r} declares no service {name!r} in its manifest."
+        )
+
+    async def start(self, name: str) -> dict:
+        """Bring up a declared sidecar and return its details, including `uri`.
+
+        Values for the environment the manifest lists under `env_from_settings`
+        are read from this plugin's own settings; everything else about the
+        container is decided by the broker.
+        """
+        spec = self._spec(name)
+        env = {
+            env_name: str(await self._settings.get(setting_key))
+            for env_name, setting_key in spec.env_from_settings.items()
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{BROKER_URL}/services/start",
+                    json={"plugin": self._manifest.id, "service": name, "env": env},
+                    timeout=180.0,  # the first start may have to pull the image
+                )
+        except Exception as e:
+            raise ServiceUnavailable(f"Service broker is not reachable: {e}") from e
+
+        if response.status_code != 200:
+            raise ServiceUnavailable(response.json().get("message", response.text))
+
+        service = response.json()["service"]
+        self._log.info("Service %r is up at %s", name, service.get("uri") or service["name"])
+        return service
+
+    async def wait_until_ready(self, name: str, timeout: float = 90.0) -> bool:
+        """Wait for a sidecar to start accepting connections.
+
+        A container is running the moment Docker returns, but the process
+        inside it is not; Lavalink takes tens of seconds to boot. Returns
+        whether the port opened before the timeout.
+        """
+        spec = self._spec(name)
+        if not spec.port:
+            return True
+
+        host = f"doppler_plg_{self._manifest.id}_{name}"
+        deadline = asyncio.get_running_loop().time() + timeout
+
+        while asyncio.get_running_loop().time() < deadline:
+            try:
+                _, writer = await asyncio.open_connection(host, spec.port)
+                writer.close()
+                await writer.wait_closed()
+                return True
+            except (OSError, asyncio.TimeoutError):
+                await asyncio.sleep(2)
+
+        self._log.warning("Service %r did not become reachable within %ss.", name, timeout)
+        return False
+
+    async def stop(self, name: str | None = None) -> list[str]:
+        """Stop one of this plugin's sidecars, or all of them."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{BROKER_URL}/services/stop",
+                    json={"plugin": self._manifest.id, "service": name},
+                    timeout=60.0,
+                )
+        except Exception as e:
+            raise ServiceUnavailable(f"Service broker is not reachable: {e}") from e
+
+        if response.status_code != 200:
+            raise ServiceUnavailable(response.json().get("message", response.text))
+        return response.json()["stopped"]
+
+
 class PluginContext:
     """Everything a plugin is handed at load time."""
 
@@ -200,6 +303,7 @@ class PluginContext:
         self.bot = bot
         self.log = logging.getLogger(f"plugin.{manifest.id}")
         self.settings = ScopedSettings(manifest.id, schema)
+        self.services = ServiceManager(manifest, self.settings, self.log)
         self._db: PluginDatabase | None = None
         # Registrations tracked so unloading a plugin really removes it -- this
         # is what makes reloading a plugin without restarting the bot work.

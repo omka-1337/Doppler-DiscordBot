@@ -1,5 +1,6 @@
 import discord
 import asyncio
+import httpx
 import os
 import logging
 import math
@@ -179,6 +180,61 @@ async def handle_music_set_active(request):
 
     return web.json_response({"status": "ok"})
 
+# Lavalink's address and password are the music plugin's settings now, so the
+# dashboard can no longer talk to Lavalink directly -- these proxy for it.
+async def handle_music_youtube_status(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    settings = await plugin.settings.all()
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings['lavalink_uri']}/youtube",
+                headers={"Authorization": settings["lavalink_password"]},
+                timeout=5.0,
+            )
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=502)
+
+    if response.status_code != 200:
+        return web.json_response({"status": "error", "message": "Lavalink returned an error"}, status=502)
+
+    return web.json_response(
+        {"status": "ok", "configured": response.json().get("refreshToken") is not None}
+    )
+
+
+async def handle_music_youtube_token(request):
+    plugin, _ = _music()
+    if plugin is None:
+        return _music_unavailable()
+
+    data = await request.json()
+    refresh_token = data.get("refresh_token", "")
+
+    # Stored as a plugin setting so it is also handed to the Lavalink container
+    # as environment the next time the sidecar is created.
+    await plugin.settings.set("youtube_oauth_refresh_token", refresh_token)
+
+    settings = await plugin.settings.all()
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings['lavalink_uri']}/youtube",
+                headers={"Authorization": settings["lavalink_password"]},
+                json={"refreshToken": refresh_token, "skipInitialization": True},
+                timeout=5.0,
+            )
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=502)
+
+    if response.status_code != 204:
+        return web.json_response({"status": "error", "message": "Lavalink rejected the token"}, status=400)
+
+    return web.json_response({"status": "ok"})
+
 # ---------------------------------------------------------------------
 
 # BOT STATS FOR THE WEB DASHBOARD
@@ -302,6 +358,8 @@ async def start_internal_api():
     app.router.add_post("/internal/music/remove", handle_music_remove)
     app.router.add_post("/internal/music/save-token", handle_music_save_token)
     app.router.add_post("/internal/music/set-active", handle_music_set_active)
+    app.router.add_get("/internal/music/youtube", handle_music_youtube_status)
+    app.router.add_post("/internal/music/youtube", handle_music_youtube_token)
     app.router.add_get("/internal/stats", handle_stats)
     app.router.add_post("/internal/check-admin", handle_check_admin)
     app.router.add_get("/internal/plugins", handle_list_plugins)

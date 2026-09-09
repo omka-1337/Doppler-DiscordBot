@@ -155,6 +155,7 @@ LEGACY_TABLE_MOVES = [
 LEGACY_ENV_SEEDS = [
     ("LAVALINK_PASSWORD", "music", "lavalink_password"),
     ("LAVALINK_URI", "music", "lavalink_uri"),
+    ("YOUTUBE_OAUTH_REFRESH_TOKEN", "music", "youtube_oauth_refresh_token"),
 ]
 
 

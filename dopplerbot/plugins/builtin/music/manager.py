@@ -73,6 +73,11 @@ class MusicBotsManager(commands.Cog):
     async def _start_music_bots(self):
         await self.main_bot.wait_until_ready()
 
+        # Docker returns as soon as the container exists, but Lavalink needs
+        # tens of seconds to boot; connecting before that just fails.
+        if getattr(self.plugin, "sidecar_started", False):
+            await self.plugin.ctx.services.wait_until_ready("lavalink")
+
         bots_data = await self.store.all()
         if not bots_data:
             logging.info("No music bots found in database.")

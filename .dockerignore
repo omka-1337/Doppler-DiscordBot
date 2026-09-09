@@ -18,5 +18,3 @@ latest.log
 __pycache__
 *.pyc
 
-# Lavalink config (used by the separate lavalink image, not this one)
-lavalink

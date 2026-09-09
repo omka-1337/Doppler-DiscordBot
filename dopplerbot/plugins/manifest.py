@@ -30,6 +30,42 @@ class PluginManifestError(Exception):
 
 
 @dataclass(frozen=True)
+class ServiceSpec:
+    """A sidecar container a plugin needs (Lavalink, a database, ...).
+
+    This is the *whole* description of what may run: the broker builds the
+    container from this and nothing else. The bot only ever names a service,
+    so plugin code cannot influence the image, the mounts or the capabilities.
+    """
+
+    name: str
+    image: str
+    # Literal environment for the container.
+    env: dict[str, str] = field(default_factory=dict)
+    # Environment resolved from the plugin's own settings at start time:
+    # {ENV_VAR: setting_key}. The only part a plugin influences, and only for
+    # keys it declared here.
+    env_from_settings: dict[str, str] = field(default_factory=dict)
+    # Read-only file mounts, {path relative to the plugin dir: container path}.
+    files: dict[str, str] = field(default_factory=dict)
+    # The port the service listens on inside the network. Never published to
+    # the host -- sidecars are reachable only from the bot's own network.
+    port: int | None = None
+    memory_mb: int = 512
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "image": self.image,
+            "env": dict(self.env),
+            "env_from_settings": dict(self.env_from_settings),
+            "files": dict(self.files),
+            "port": self.port,
+            "memory_mb": self.memory_mb,
+        }
+
+
+@dataclass(frozen=True)
 class PluginManifest:
     id: str
     name: str
@@ -44,6 +80,8 @@ class PluginManifest:
     # nothing is installed automatically -- pulling arbitrary packages on a
     # user's behalf is the operator's decision, not the plugin's.
     requirements: list[str] = field(default_factory=list)
+    # Sidecar containers this plugin needs; see ServiceSpec.
+    services: list[ServiceSpec] = field(default_factory=list)
     # Whether the plugin starts enabled the first time it is discovered.
     default_enabled: bool = True
     # Filesystem location. Empty for manifests fetched from a remote catalog.
@@ -66,6 +104,7 @@ class PluginManifest:
             "entrypoint": self.entrypoint,
             "homepage": self.homepage,
             "requirements": list(self.requirements),
+            "services": [service.to_dict() for service in self.services],
             "default_enabled": self.default_enabled,
         }
 
@@ -84,6 +123,102 @@ def is_api_compatible(api_version: str) -> bool:
     except (ValueError, TypeError):
         return False
     return want_major == have_major and want_minor <= have_minor
+
+
+_SERVICE_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
+_ENV_NAME_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
+
+# A sidecar gets a hard memory ceiling; a plugin cannot ask for the whole host.
+MAX_SERVICE_MEMORY_MB = 4096
+
+
+def _parse_services(data: dict, plugin_id: str) -> list[ServiceSpec]:
+    raw_services = data.get("services", [])
+    if not isinstance(raw_services, list):
+        raise PluginManifestError(f"{plugin_id!r}: 'services' must be a list.")
+
+    services: list[ServiceSpec] = []
+    seen: set[str] = set()
+
+    for raw in raw_services:
+        if not isinstance(raw, dict):
+            raise PluginManifestError(f"{plugin_id!r}: each service must be an object.")
+
+        name = str(raw.get("name", ""))
+        if not _SERVICE_NAME_PATTERN.match(name):
+            raise PluginManifestError(
+                f"{plugin_id!r}: invalid service name {name!r} "
+                "(2-32 chars, lowercase letters, digits, '-' and '_')."
+            )
+        if name in seen:
+            raise PluginManifestError(f"{plugin_id!r}: duplicate service {name!r}.")
+        seen.add(name)
+
+        image = str(raw.get("image", "")).strip()
+        if not image:
+            raise PluginManifestError(f"{plugin_id!r}: service {name!r} declares no image.")
+        # A floating "latest" would silently change what runs on every restart.
+        if ":" not in image.rsplit("/", 1)[-1] and "@" not in image:
+            raise PluginManifestError(
+                f"{plugin_id!r}: service {name!r} image {image!r} must pin a tag or digest."
+            )
+
+        env = raw.get("env", {}) or {}
+        env_from_settings = raw.get("env_from_settings", {}) or {}
+        files = raw.get("files", {}) or {}
+        for label, mapping in (("env", env), ("env_from_settings", env_from_settings), ("files", files)):
+            if not isinstance(mapping, dict):
+                raise PluginManifestError(f"{plugin_id!r}: service {name!r} '{label}' must be an object.")
+
+        for key in list(env) + list(env_from_settings):
+            if not _ENV_NAME_PATTERN.match(str(key)):
+                raise PluginManifestError(
+                    f"{plugin_id!r}: service {name!r} declares an invalid environment name {key!r}."
+                )
+
+        for source, target in files.items():
+            source = str(source)
+            # Mounts may only expose files from inside the plugin's own folder,
+            # so a manifest cannot reach the host filesystem.
+            if source.startswith("/") or ".." in Path(source).parts:
+                raise PluginManifestError(
+                    f"{plugin_id!r}: service {name!r} file {source!r} must be a relative path "
+                    "inside the plugin directory."
+                )
+            if not str(target).startswith("/"):
+                raise PluginManifestError(
+                    f"{plugin_id!r}: service {name!r} mount target {target!r} must be an absolute path."
+                )
+
+        port = raw.get("port")
+        if port is not None:
+            try:
+                port = int(port)
+            except (TypeError, ValueError):
+                raise PluginManifestError(f"{plugin_id!r}: service {name!r} has a non-numeric port.") from None
+            if not 1 <= port <= 65535:
+                raise PluginManifestError(f"{plugin_id!r}: service {name!r} port {port} is out of range.")
+
+        try:
+            memory_mb = int(raw.get("memory_mb", 512))
+        except (TypeError, ValueError):
+            raise PluginManifestError(f"{plugin_id!r}: service {name!r} has a non-numeric memory_mb.") from None
+        if not 64 <= memory_mb <= MAX_SERVICE_MEMORY_MB:
+            raise PluginManifestError(
+                f"{plugin_id!r}: service {name!r} memory_mb must be between 64 and {MAX_SERVICE_MEMORY_MB}."
+            )
+
+        services.append(ServiceSpec(
+            name=name,
+            image=image,
+            env={str(k): str(v) for k, v in env.items()},
+            env_from_settings={str(k): str(v) for k, v in env_from_settings.items()},
+            files={str(k): str(v) for k, v in files.items()},
+            port=port,
+            memory_mb=memory_mb,
+        ))
+
+    return services
 
 
 def parse_manifest(data: dict, path: Path | None = None) -> PluginManifest:
@@ -131,6 +266,7 @@ def parse_manifest(data: dict, path: Path | None = None) -> PluginManifest:
         entrypoint=str(data.get("entrypoint", "plugin.py")),
         homepage=str(data.get("homepage", "")),
         requirements=requirements,
+        services=_parse_services(data, plugin_id),
         default_enabled=bool(data.get("default_enabled", True)),
         path=path,
     )

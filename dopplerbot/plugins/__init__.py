@@ -10,6 +10,8 @@ from dopplerbot.plugins.api import (
     PluginSetting,
     PluginSettingError,
     ScopedSettings,
+    ServiceManager,
+    ServiceUnavailable,
     SettingType,
 )
 from dopplerbot.plugins.loader import BUILTIN_ROOT, INSTALLED_ROOT, PluginRegistry
@@ -18,6 +20,7 @@ from dopplerbot.plugins.manifest import (
     MANIFEST_FILENAME,
     PluginManifest,
     PluginManifestError,
+    ServiceSpec,
 )
 
 __all__ = [
@@ -26,6 +29,9 @@ __all__ = [
     "PluginSetting",
     "PluginSettingError",
     "ScopedSettings",
+    "ServiceManager",
+    "ServiceSpec",
+    "ServiceUnavailable",
     "SettingType",
     "PluginRegistry",
     "BUILTIN_ROOT",

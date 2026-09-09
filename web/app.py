@@ -49,8 +49,6 @@ EMBED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 EMBED_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 EMBED_IMAGE_ALLOWED_EXT = {".png", ".jpg", ".jpeg"}
 
-LAVALINK_URI = os.getenv("LAVALINK_URI", "http://lavalink_music_server:2333")
-LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
 LOG_PATH = BASE_DIR / "latest.log"
 
@@ -470,44 +468,20 @@ async def toggle_bot_active(payload: ToggleBotPayload):
 
 # ---------------------------OAuth-------------------------------------
 
-@app.get("/api/music/youtube-oauth-status")
-async def get_youtube_oauth_status():
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{LAVALINK_URI}/youtube",
-                headers={"Authorization": LAVALINK_PASSWORD or ""},
-                timeout=5.0
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return JSONResponse({"status": "ok", "configured": data.get("refreshToken") is not None})
-            return JSONResponse({"status": "error", "message": "Lavalink returned an error"}, status_code=502)
-    except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
-
-# ---------------------------------------------------------------------
-
 class YouTubeOAuthPayload(BaseModel):
     refresh_token: str
 
+
+@app.get("/api/music/youtube-oauth-status")
+async def get_youtube_oauth_status():
+    return JSONResponse(await _call_bot("GET", "/internal/music/youtube"))
+
+
 @app.post("/api/music/youtube-oauth")
 async def set_youtube_oauth(payload: YouTubeOAuthPayload):
-    update_env_file("YOUTUBE_OAUTH_REFRESH_TOKEN", payload.refresh_token)
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{LAVALINK_URI}/youtube",
-                headers={"Authorization": LAVALINK_PASSWORD or ""},
-                json={"refreshToken": payload.refresh_token, "skipInitialization": True},
-                timeout=5.0
-            )
-            if response.status_code == 204:
-                return JSONResponse({"status": "ok"})
-            return JSONResponse({"status": "error", "message": "Lavalink rejected the token"}, status_code=400)
-    except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=502)
+    return JSONResponse(await _call_bot(
+        "POST", "/internal/music/youtube", {"refresh_token": payload.refresh_token}
+    ))
 
 # ---------------------------------------------------------------------
 

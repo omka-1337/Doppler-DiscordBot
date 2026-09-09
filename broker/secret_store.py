@@ -21,18 +21,13 @@ SECRETS_FILE = SECRETS_DIR / "secrets.json"
 # choice, say) is ordinary configuration and safe to read back.
 SECRET_FIELDS = {
     "ai": ("gemini_api_key", "deepseek_api_key", "chatgpt_api_key"),
-    # Translation holds no credentials of its own: it is either keyless or it
-    # reuses the AI provider above.
-    "translate": (),
 }
 
+# Translation is absent on purpose: it holds no credential, and which backend to
+# use is the asking plugin's decision, carried on the request.
 DEFAULTS = {
     "ai": {"provider": "gemini", "gemini_api_key": "", "deepseek_api_key": "", "chatgpt_api_key": ""},
-    "translate": {"provider": "google_free"},
 }
-
-# Values stored before DeepL and Google Cloud were dropped.
-_RETIRED_TRANSLATE_PROVIDERS = {"google", "deepl", "google-cloud", "google-free"}
 
 
 def _load() -> dict:
@@ -48,11 +43,6 @@ def _load() -> dict:
     for section, fields in stored.items():
         if section in merged and isinstance(fields, dict):
             merged[section].update({k: v for k, v in fields.items() if k in merged[section]})
-
-    # A retired provider name would otherwise select a backend that no longer
-    # exists; fall back to the keyless one.
-    if merged["translate"].get("provider") in _RETIRED_TRANSLATE_PROVIDERS:
-        merged["translate"]["provider"] = "google_free"
 
     return merged
 

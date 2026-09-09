@@ -1,6 +1,6 @@
 """Translation, performed here so any API key stays out of the bot's process.
 
-Two modes, chosen by the operator:
+Two modes, chosen per call by the plugin asking for the translation:
 
 * ``google_free`` — a keyless library. Costs nothing and needs no setup, but it
   scrapes a public endpoint and gets rate limited under load.
@@ -133,9 +133,12 @@ async def _with_ai(text: str, target_base_lang: str, ai_config: dict) -> Transla
     )
 
 
-async def translate(text: str, target_base_lang: str, config: dict, ai_config: dict) -> TranslationResult:
-    mode = config.get("provider", PROVIDER_FREE)
-
+async def translate(
+    text: str, target_base_lang: str, mode: str, ai_config: dict
+) -> TranslationResult:
+    # An unknown mode falls back to the keyless backend rather than failing:
+    # a plugin asking for something this broker does not implement should still
+    # get a translation.
     if mode == PROVIDER_AI:
         return await _with_ai(text, target_base_lang, ai_config)
 

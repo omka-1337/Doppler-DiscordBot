@@ -386,9 +386,15 @@ async def handle_install_plugin(request):
     plugin_id = data.get("plugin")
     bot.plugins.discover()
 
-    # Installing something and then having to switch it on separately is a
-    # pointless extra step when the plugin says it wants to be on.
-    if await bot.plugins.is_enabled(plugin_id):
+    if plugin_id in bot.plugins.loaded:
+        # Installing over a running plugin is an upgrade: load() would return
+        # early because it is already loaded, leaving the previous version in
+        # memory with the new files sitting unused on disk.
+        await bot.plugins.reload(plugin_id)
+        await sync_commands()
+    elif await bot.plugins.is_enabled(plugin_id):
+        # Installing something and then having to switch it on separately is a
+        # pointless extra step when the plugin says it wants to be on.
         await bot.plugins.load(plugin_id)
         await sync_commands()
 

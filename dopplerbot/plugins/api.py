@@ -329,9 +329,18 @@ class TranslateAccess:
     def __init__(self, log: logging.Logger):
         self._log = log
 
-    async def text(self, text: str, target_lang: str) -> TranslationResult:
-        """Translate into a base language code such as "uk" or "pt-BR"."""
-        return await core_translate.translate(text, target_lang)
+    # Backends this broker implements. A plugin that offers the choice to the
+    # operator should declare a setting with exactly these values.
+    MODE_FREE = "google_free"
+    MODE_AI = "ai"
+
+    async def text(self, text: str, target_lang: str, mode: str = MODE_FREE) -> TranslationResult:
+        """Translate into a base language code such as "uk" or "pt-BR".
+
+        `mode` picks the backend: MODE_FREE needs nothing, MODE_AI reuses the
+        bot's configured AI provider. Either way no credential reaches here.
+        """
+        return await core_translate.translate(text, target_lang, mode)
 
 
 class PluginContext:

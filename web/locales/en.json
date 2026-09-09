@@ -59,11 +59,11 @@
             "field2_description": "From your app's OAuth2 page in the Developer Portal. Setting this turns on dashboard login (the Client ID is detected automatically). The login page shows the redirect URI you'll need to register there.",
             "save": "💾 Save settings"
         },
-        "tab_providers": "🔐 Providers",
+        "tab_providers": "🔐 AI Provider",
         "providers": {
-            "title": "🔐 AI & Translation Providers",
-            "description": "Configured once here and shared by every plugin, so a key is never pasted into more than one place.",
-            "note": "These keys are stored by the broker, in a volume the bot container cannot see. Plugins ask for a completion or a translation and get the result — they never receive the key. Saved keys are never shown again.",
+            "title": "🔐 AI Provider",
+            "description": "Configured once here and shared by every plugin that uses a model, so an API key is never pasted into more than one place.",
+            "note": "This key is stored by the broker, in a volume the bot container cannot see. Plugins ask for a completion or a translation and get the result — they never receive the key. Saved keys are never shown again.",
             "save": "💾 Save"
         }
     },

@@ -526,14 +526,13 @@ async def handle_translate(request):
     data = await request.json()
     text = data.get("text", "")
     target = data.get("target_lang", "en")
+    mode = data.get("mode", translate_provider.PROVIDER_FREE)
 
     if not text:
         return web.json_response({"status": "error", "message": "text is required"}, status=400)
 
     try:
-        result = await translate_provider.translate(
-            text, target, secret_store.get("translate"), secret_store.get("ai")
-        )
+        result = await translate_provider.translate(text, target, mode, secret_store.get("ai"))
     except translate_provider.TranslationError as e:
         return web.json_response({"status": "error", "message": str(e)}, status=502)
 

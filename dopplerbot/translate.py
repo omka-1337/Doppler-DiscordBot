@@ -28,12 +28,12 @@ class TranslationResult:
     provider: str
 
 
-async def translate(text: str, target_lang: str) -> TranslationResult:
+async def translate(text: str, target_lang: str, mode: str = "google_free") -> TranslationResult:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{BROKER_URL}/translate",
-                json={"text": text, "target_lang": target_lang},
+                json={"text": text, "target_lang": target_lang, "mode": mode},
                 timeout=60.0,
             )
     except Exception as e:

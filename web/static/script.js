@@ -1429,11 +1429,15 @@ async function removePluginSource(name) {
 }
 
 // ---------------------------------------------------------------------
-// PROVIDERS (AI + translation)
+// PROVIDERS (AI)
 //
 // The broker holds these keys in a volume the bot container cannot see, and
 // never returns their values — only whether each one is set. So this form is
 // built from that metadata, and an untouched field means "leave as is".
+//
+// Only credentials live here. A plugin that can pick between backends declares
+// that choice as its own setting instead — the translator's free-or-AI switch,
+// for one.
 
 const PROVIDER_SECTIONS = [
     {
@@ -1445,18 +1449,6 @@ const PROVIDER_SECTIONS = [
             ['deepseek_api_key', 'DeepSeek API key'],
             ['chatgpt_api_key', 'ChatGPT API key'],
         ],
-    },
-    {
-        section: 'translate',
-        title: 'Translation',
-        choices: [
-            ['google_free', 'Google Translate — free, no key required'],
-            ['ai', 'AI translation — uses the AI provider above'],
-        ],
-        // Translation needs no credentials of its own: it is either keyless or
-        // it reuses the AI key configured above.
-        keys: [],
-        hint: 'The free backend costs nothing and needs no setup, but it gets rate limited under load. AI translation reuses the key above and handles idiom and context better.',
     },
 ];
 

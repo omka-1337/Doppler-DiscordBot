@@ -80,6 +80,10 @@ LOGIN_STATE_TTL_SECONDS = 600
 # Paths reachable without being logged in.
 PUBLIC_PATHS = {"/auth/login", "/auth/callback"}
 PUBLIC_PREFIXES = ("/static/",)
+# Reachable without a session only while setup is unfinished — there is no
+# token to log in with yet. Once it is done these fall back under the login
+# check like everything else, so they cannot be used to overwrite the token.
+SETUP_PREFIXES = ("/setup", "/api/setup/")
 
 # The OAuth2 "Client ID" is the bot application's own ID, so it's looked up from
 # Discord with the bot token already on hand rather than asking anyone to copy it.
@@ -114,6 +118,14 @@ async def get_discord_client_id() -> str | None:
     return _cached_client_id
 
 
+# Until both of these exist the dashboard has nothing to authenticate against,
+# so every request is sent to the first-run setup page. Requiring the client
+# secret here — not just the token — is what makes login mandatory rather than
+# optional: there is no path to a working dashboard that skips it.
+def is_setup_complete() -> bool:
+    return bool(os.getenv("DISCORD_BOT_TOKEN") and os.getenv("DISCORD_CLIENT_SECRET"))
+
+
 # Login turns itself on — no separate switch — the moment everything it needs
 # exists: a bot token, a locked home guild (so there's something to check
 # ownership/Administrator against), and a Client Secret. Until then the
@@ -132,6 +144,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
+
+        if not is_setup_complete():
+            if path.startswith(SETUP_PREFIXES):
+                return await call_next(request)
+            if path.startswith("/api/") or path.startswith("/ws/"):
+                return JSONResponse({"detail": "Setup required"}, status_code=503)
+            return RedirectResponse("/setup")
 
         if not await is_login_configured():
             return await call_next(request)
@@ -203,6 +222,145 @@ async def get_dashboard(request: Request):
         }
     )
 
+
+# ---------------------------------------------------------------------
+
+# FIRST-RUN SETUP
+# Both values are verified against Discord before they can be saved, so a typo
+# cannot leave the install in a state where the dashboard is unreachable and the
+# bot will not start.
+
+async def _verify_bot_token(token: str) -> dict:
+    """Ask Discord who this token belongs to. Also yields the client id."""
+    if not token.strip():
+        return {"valid": False, "message": "Enter a bot token."}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{DISCORD_API_BASE}/oauth2/applications/@me",
+                headers={"Authorization": f"Bot {token.strip()}"},
+                timeout=10.0,
+            )
+    except Exception as e:
+        return {"valid": False, "message": f"Could not reach Discord: {e}"}
+
+    if response.status_code == 401:
+        return {"valid": False, "message": "Discord rejected this token."}
+    if response.status_code != 200:
+        return {"valid": False, "message": f"Discord returned HTTP {response.status_code}."}
+
+    app_info = response.json()
+    bot_user = app_info.get("bot") or {}
+    return {
+        "valid": True,
+        "client_id": app_info.get("id"),
+        "application": app_info.get("name", ""),
+        "bot_username": bot_user.get("username", ""),
+    }
+
+
+async def _verify_client_secret(client_id: str, secret: str) -> dict:
+    """Verify the secret by actually using it.
+
+    A client-credentials grant is the only way to tell a correct secret from a
+    plausible-looking one: Discord will not confirm it any other way, and a
+    wrong secret would otherwise only surface as a failed login later.
+    """
+    if not secret.strip():
+        return {"valid": False, "message": "Enter the client secret."}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{DISCORD_API_BASE}/oauth2/token",
+                data={"grant_type": "client_credentials", "scope": "identify"},
+                auth=(client_id, secret.strip()),
+                timeout=10.0,
+            )
+    except Exception as e:
+        return {"valid": False, "message": f"Could not reach Discord: {e}"}
+
+    if response.status_code == 200:
+        return {"valid": True}
+    if response.status_code in (400, 401):
+        return {"valid": False, "message": "Discord rejected this client secret."}
+    return {"valid": False, "message": f"Discord returned HTTP {response.status_code}."}
+
+
+class SetupTokenPayload(BaseModel):
+    token: str
+
+
+class SetupSecretPayload(BaseModel):
+    token: str
+    client_secret: str
+
+
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_page(request: Request):
+    if is_setup_complete():
+        return RedirectResponse("/")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="setup.html",
+        context={
+            "version": DOPPLER_VERSION,
+            "redirect_uri": f"{str(request.base_url).rstrip('/')}/auth/callback",
+            "portal_url": DISCORD_DEVELOPER_PORTAL_URL,
+        },
+    )
+
+
+@app.post("/api/setup/validate-token")
+async def setup_validate_token(payload: SetupTokenPayload):
+    return JSONResponse(await _verify_bot_token(payload.token))
+
+
+@app.post("/api/setup/validate-secret")
+async def setup_validate_secret(payload: SetupSecretPayload):
+    token_check = await _verify_bot_token(payload.token)
+    if not token_check["valid"]:
+        return JSONResponse({"valid": False, "message": "Check the bot token first."})
+
+    return JSONResponse(await _verify_client_secret(token_check["client_id"], payload.client_secret))
+
+
+@app.post("/api/setup/save")
+async def setup_save(payload: SetupSecretPayload):
+    # Re-verified here rather than trusting the browser: the buttons that
+    # enabled saving live on the client, and this endpoint is reachable without
+    # them.
+    token_check = await _verify_bot_token(payload.token)
+    if not token_check["valid"]:
+        raise HTTPException(status_code=400, detail=token_check.get("message", "Invalid bot token."))
+
+    secret_check = await _verify_client_secret(token_check["client_id"], payload.client_secret)
+    if not secret_check["valid"]:
+        raise HTTPException(status_code=400, detail=secret_check.get("message", "Invalid client secret."))
+
+    token = payload.token.strip()
+    secret = payload.client_secret.strip()
+
+    update_env_file("DISCORD_BOT_TOKEN", token)
+    update_env_file("DISCORD_CLIENT_SECRET", secret)
+    os.environ["DISCORD_BOT_TOKEN"] = token
+    os.environ["DISCORD_CLIENT_SECRET"] = secret
+
+    # The bot container is not shown .env, and compose only reads it when the
+    # stack comes up — so the token also goes in the database, where the bot
+    # looks on its next restart.
+    await set_settings("discord_bot_token", token, "Main")
+
+    global _cached_client_id
+    _cached_client_id = token_check["client_id"]
+
+    return JSONResponse({
+        "status": "ok",
+        "bot_username": token_check.get("bot_username", ""),
+        "redirect": "/auth/login",
+    })
 
 # ---------------------------------------------------------------------
 

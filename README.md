@@ -182,9 +182,18 @@ make start
 
 Once it's running:
 
-1. Open `http://localhost:8000` (or `http://<your-server-address>:8000`).
-2. Go to **Settings → API & System** and paste in your Discord bot token. Saving it restarts the bot container automatically.
-3. Invite the bot to your server using the OAuth2 URL from the Discord Developer Portal (scopes: `bot`, `applications.commands`).
+1. Open `http://localhost:8000` (or `http://<your-server-address>:8000`). Everything
+   redirects to a first-run setup page until the bot is configured.
+2. Paste your **bot token** and **OAuth2 client secret**. Both are verified against
+   Discord before they can be saved, and the page shows the redirect URI you need to
+   register under **OAuth2 → Redirects**.
+3. Saving takes you to the Discord login. The bot container picks up the token on its
+   own — no manual restart.
+4. Invite the bot to your server using the OAuth2 URL from the Developer Portal
+   (scopes: `bot`, `applications.commands`). The first server it joins becomes its home.
+
+The client secret is required rather than optional: dashboard login is set up before
+the dashboard is ever reachable, so a fresh install is never briefly open.
 
 No `docker`/`docker compose` on the CLI required beyond the initial `make start` — everything else (modules, prefix, moderation, AI provider and key, translator provider, voice channel settings, embed templates, music worker bots) is managed from the dashboard.
 

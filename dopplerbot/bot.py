@@ -40,7 +40,20 @@ intents.guilds = True
 # on_member_join, which Server Protect uses to post the verify prompt.
 intents.members = True
 
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+# Resolved at startup rather than at import: the token may not exist yet on a
+# fresh install, and the dashboard's first-run setup writes it while this
+# container is running.
+async def resolve_token() -> str:
+    token = (os.getenv("DISCORD_BOT_TOKEN") or "").strip()
+    if token:
+        return token
+
+    # This container is deliberately not shown .env, and compose only reads it
+    # when the stack comes up -- so first-run setup also stores the token in the
+    # database, which is where it is picked up from here. No extra exposure:
+    # discord.py holds the token in memory anyway, where plugin code can reach it.
+    return (await get_settings("discord_bot_token", "", category="Main") or "").strip()
+
 
 async def get_prefix(bot, message):
     prefix = await get_settings("prefix", "+")
@@ -590,14 +603,20 @@ async def main():
         await start_internal_api()
         await drop_migrated_provider_keys()
 
-        if not TOKEN:
-            logging.error("DISCORD_BOT_TOKEN parameter missing in .env file.")
+        token = await resolve_token()
+        if not token:
+            # Exiting restarts the container, which re-reads the database — so
+            # finishing setup in the dashboard brings the bot up on its own.
+            logging.error(
+                "No bot token configured yet. Finish the first-run setup in the dashboard; "
+                "this container will pick it up on its next restart."
+            )
             return
 
         async with bot:
             await load_cogs(bot)
             await bot.plugins.load_all()
-            await bot.start(TOKEN)
+            await bot.start(token)
 
     finally:
         await close_db()

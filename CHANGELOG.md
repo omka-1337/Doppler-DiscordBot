@@ -23,6 +23,15 @@ features of its own and assembles them from a plugin source.
 - Plugins can be enabled, configured and reloaded from the dashboard while the
   bot stays connected.
 
+### First-run setup
+
+- A setup page is shown until a bot token and an OAuth2 client secret are both
+  configured; nothing else in the dashboard is reachable until then, so login is
+  in place before the panel ever is.
+- Both values are verified against Discord — the token by identifying the
+  application, the secret by performing a client-credentials grant — and saving
+  re-checks them server-side rather than trusting the browser.
+
 ### Broker
 
 - A separate `broker` container is the only component with access to the Docker

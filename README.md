@@ -8,7 +8,7 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 
 - 🎵 **Music** *(plugin)* — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
 - 🤖 **AI Chat** *(plugin)* — conversational AI; the persona name, system prompt, language and tone are the plugin's settings, while the provider (Google Gemini, DeepSeek, or ChatGPT) and its API key belong to the bot under **Settings → AI Provider**.
-- 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Supports DeepL and Google (official API or a free keyless fallback).
+- 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Free and keyless by default, or switch it to the AI provider you already configured for better idiom and context.
 - 🔊 **Temporary Voice Channels** *(plugin)* — joining a configured "hub" channel automatically creates a private voice channel for the user, with buttons to rename it, set a user limit, change the bitrate, lock it and allow specific people in.
 - 🛡️ **Moderation** *(plugin)* — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
 - 🛠️ **Rich Embed Builder** *(plugin)* — build Discord messages visually in the dashboard using Components V2 (independent cards, each with its own accent color and ordered text/image blocks), then send them with `/embed <name>`. Images can be linked by URL or uploaded directly.
@@ -166,7 +166,6 @@ needs a container" no longer means "this plugin gets root on the host".
 - A Discord bot application ([Discord Developer Portal](https://discord.com/developers/applications)) with the **Message Content** privileged intent enabled (required for AI chat and translation)
 - Optional, depending on which modules you use:
   - An API key for whichever AI provider you pick for AI chat: [Gemini](https://aistudio.google.com/apikey), [DeepSeek](https://platform.deepseek.com/api_keys), or [OpenAI](https://platform.openai.com/api-keys)
-  - A DeepL and/or Google Cloud Translate API key for translation (a free, keyless fallback is used otherwise)
   - For **Server Protect**: the **Server Members Intent** privileged intent (needed to detect joins at all)
   - For **Dashboard Login**: the OAuth2 Client Secret from the same Developer Portal application, plus each address you open the dashboard from registered under **OAuth2 → Redirects** (the login page shows the exact value to paste)
 

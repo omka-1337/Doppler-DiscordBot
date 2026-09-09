@@ -1,89 +1,72 @@
-"""Translation, performed here so the API keys never leave this container.
+"""Translation, performed here so any API key stays out of the bot's process.
 
-The caller sends text and a target language and receives the translation. Which
-provider answered and what key was used stay on this side.
+Two modes, chosen by the operator:
 
-Selection: DeepL is used only if a DeepL key is set, otherwise Google. For
-Google, an API key means the official Cloud Translate API; without one, a free
-keyless library is used instead.
+* ``google_free`` — a keyless library. Costs nothing and needs no setup, but it
+  scrapes a public endpoint and gets rate limited under load.
+* ``ai`` — the AI provider already configured for the bot. Better with idiom
+  and context, and it reuses the one key rather than asking for another.
+
+There is deliberately no DeepL or Google Cloud option any more: both meant a
+second credential to obtain and store for a job the configured model already
+does.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
 
+from broker.providers import ai as ai_providers
+
 log = logging.getLogger("broker.translate")
+
+PROVIDER_FREE = "google_free"
+PROVIDER_AI = "ai"
 
 
 class TranslationError(Exception):
-    """Raised when no backend could perform the translation."""
+    """Raised when the translation could not be performed."""
 
 
 @dataclass
 class TranslationResult:
     translated_text: str
-    source_lang: str      # detected source language, as the provider reported it
+    source_lang: str      # detected source language, as the backend reported it
     target_lang: str      # the base language code we were asked for
-    provider_used: str    # "deepl" / "google-cloud" / "google-free"
+    provider_used: str
 
 
-# DeepL wants uppercase codes, with a few spelled-out regional variants.
-_BASE_TO_DEEPL = {
-    "en": "EN-US",
-    "pt-BR": "PT-BR",
-    "zh-CN": "ZH",
-    "zh-TW": "ZH",
-    "no": "NB",
-}
-
-# Google codes work for both the official API and the keyless fallback.
+# Google codes for the keyless backend.
 _BASE_TO_GOOGLE = {"pt-BR": "pt"}
 
-
-def to_deepl_lang(base_lang: str) -> str:
-    return _BASE_TO_DEEPL.get(base_lang, base_lang.upper())
+# Spelled out for the model: "translate into uk" is far weaker than
+# "translate into Ukrainian".
+_BASE_TO_NAME = {
+    "en": "English", "uk": "Ukrainian", "pl": "Polish", "de": "German",
+    "fr": "French", "es": "Spanish", "it": "Italian", "pt-BR": "Brazilian Portuguese",
+    "ru": "Russian", "ja": "Japanese", "ko": "Korean", "zh-CN": "Simplified Chinese",
+    "zh-TW": "Traditional Chinese", "nl": "Dutch", "sv": "Swedish", "no": "Norwegian",
+    "da": "Danish", "fi": "Finnish", "cs": "Czech", "hu": "Hungarian",
+    "ro": "Romanian", "bg": "Bulgarian", "el": "Greek", "tr": "Turkish",
+    "vi": "Vietnamese", "th": "Thai", "hi": "Hindi", "id": "Indonesian",
+    "hr": "Croatian", "lt": "Lithuanian",
+}
 
 
 def to_google_lang(base_lang: str) -> str:
     return _BASE_TO_GOOGLE.get(base_lang, base_lang.lower())
 
 
-async def _with_deepl(text: str, target_base_lang: str, api_key: str) -> TranslationResult:
-    import deepl
-
-    translator = deepl.Translator(api_key)
-    # deepl's client is synchronous, so it runs in a thread to keep the loop free.
-    raw = await asyncio.to_thread(
-        translator.translate_text, text, target_lang=to_deepl_lang(target_base_lang)
-    )
-    result = raw[0] if isinstance(raw, list) else raw
-
-    return TranslationResult(result.text, result.detected_source_lang, target_base_lang, "deepl")
-
-
-async def _with_google_cloud(text: str, target_base_lang: str, api_key: str) -> TranslationResult:
-    from google.cloud import translate_v2 as translate_client
-
-    client = translate_client.Client(client_options={"api_key": api_key})
-    result = await asyncio.to_thread(
-        client.translate, text, target_language=to_google_lang(target_base_lang)
-    )
-
-    return TranslationResult(
-        result["translatedText"],
-        result.get("detectedSourceLanguage", "auto"),
-        target_base_lang,
-        "google-cloud",
-    )
+def language_name(base_lang: str) -> str:
+    return _BASE_TO_NAME.get(base_lang, base_lang)
 
 
 # The keyless backend scrapes a web endpoint, and when that endpoint refuses --
 # rate limiting, most often -- the library hands back the error page's text as
 # though it were the translation. There is no exception to catch, so the result
-# has to be inspected. Matching on page text is a heuristic, but the
-# alternative is posting Google's error page into Discord as a translation.
+# has to be inspected.
 _ERROR_PAGE_MARKERS = (
-    "That\u2019s an error",
+    "That’s an error",
     "That's an error",
     "Error 500 (Server Error)",
     "Error 429 (Too Many Requests)",
@@ -105,33 +88,55 @@ async def _with_google_free(text: str, target_base_lang: str) -> TranslationResu
     )
 
     if not translated or not translated.strip():
-        raise TranslationError("The keyless translation backend returned nothing.")
+        raise TranslationError("The free translation backend returned nothing.")
 
     if _looks_like_an_error_page(translated):
         raise TranslationError(
-            "The keyless translation backend is refusing requests (rate limited). "
-            "Configure a DeepL or Google Cloud key for reliable translation."
+            "The free translation backend is refusing requests (rate limited). "
+            "Switching translation to the AI provider avoids this."
         )
 
-    return TranslationResult(translated, "auto", target_base_lang, "google-free")
+    return TranslationResult(translated, "auto", target_base_lang, PROVIDER_FREE)
 
 
-async def translate(text: str, target_base_lang: str, config: dict) -> TranslationResult:
-    provider = config.get("provider", "google")
-    deepl_key = config.get("deepl_api_key") or None
-    google_key = config.get("google_api_key") or None
+async def _with_ai(text: str, target_base_lang: str, ai_config: dict) -> TranslationResult:
+    provider_name = ai_config.get("provider", "gemini")
+    api_key = ai_config.get(f"{provider_name}_api_key", "")
 
-    if provider == "deepl" and not deepl_key:
-        provider = "google"
+    if not api_key:
+        raise TranslationError(
+            "AI translation is selected but no AI provider is configured. "
+            "Set an API key under Settings -> Providers."
+        )
 
+    target = language_name(target_base_lang)
+    system_prompt = (
+        f"You are a translation engine. Translate the user's message into {target}.\n"
+        "Reply with the translation and nothing else: no quotes, no notes, no "
+        "explanation, and no mention of the source language. Preserve the original "
+        "formatting, emoji and any @mentions or #channel references exactly as they "
+        "appear. If the message is already in the target language, return it unchanged."
+    )
+
+    provider = ai_providers.PROVIDERS.get(provider_name, ai_providers.gemini)
     try:
-        if provider == "deepl" and deepl_key:
-            return await _with_deepl(text, target_base_lang, deepl_key)
-        if google_key:
-            return await _with_google_cloud(text, target_base_lang, google_key)
-        return await _with_google_free(text, target_base_lang)
-    except TranslationError:
-        raise
+        translated = await provider.generate_reply(system_prompt, text, api_key)
     except Exception as e:
-        log.error("Translation failed (provider=%s): %s", provider, e)
-        raise TranslationError(str(e)) from e
+        log.error("AI translation failed (provider=%s): %s", provider_name, e)
+        raise TranslationError(f"{provider_name} could not translate: {e}") from e
+
+    if not translated or not translated.strip():
+        raise TranslationError("The AI provider returned an empty translation.")
+
+    return TranslationResult(
+        translated.strip(), "auto", target_base_lang, f"{PROVIDER_AI}-{provider_name}"
+    )
+
+
+async def translate(text: str, target_base_lang: str, config: dict, ai_config: dict) -> TranslationResult:
+    mode = config.get("provider", PROVIDER_FREE)
+
+    if mode == PROVIDER_AI:
+        return await _with_ai(text, target_base_lang, ai_config)
+
+    return await _with_google_free(text, target_base_lang)

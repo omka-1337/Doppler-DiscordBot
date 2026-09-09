@@ -41,6 +41,12 @@ features of its own and assembles them from a plugin source.
 - It installs plugins, owns the trust configuration, and holds the AI and
   translation API keys, making those calls itself.
 
+### Translation
+
+- DeepL and Google Cloud are gone. Translation is keyless by default, and can be
+  switched to the AI provider already configured for the bot — one credential
+  instead of a second one to obtain and store for a job the model already does.
+
 ### Trust
 
 - `config/` and `plugins/` are mounted read-only into the bot, so plugin code

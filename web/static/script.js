@@ -1449,12 +1449,14 @@ const PROVIDER_SECTIONS = [
     {
         section: 'translate',
         title: 'Translation',
-        choices: [['google', 'Google'], ['deepl', 'DeepL']],
-        keys: [
-            ['deepl_api_key', 'DeepL API key'],
-            ['google_api_key', 'Google Cloud Translate API key'],
+        choices: [
+            ['google_free', 'Google Translate — free, no key required'],
+            ['ai', 'AI translation — uses the AI provider above'],
         ],
-        hint: 'Without any key, translation falls back to a free keyless Google library.',
+        // Translation needs no credentials of its own: it is either keyless or
+        // it reuses the AI key configured above.
+        keys: [],
+        hint: 'The free backend costs nothing and needs no setup, but it gets rate limited under load. AI translation reuses the key above and handles idiom and context better.',
     },
 ];
 

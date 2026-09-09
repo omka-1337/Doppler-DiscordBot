@@ -62,7 +62,7 @@
         "tab_ai": "🤖 AI Provider",
         "ai": {
             "title": "🤖 AI Provider & Keys",
-            "description": "Which service answers, and its API key. These belong to the bot: plugins ask it for a reply and never see the key.",
+            "description": "Configured once here and shared by every plugin that uses a model, so an API key is never pasted into more than one place.",
             "provider": "Provider",
             "provider_hint": "Only the selected provider's key is used. The others can stay empty.",
             "save": "💾 Save AI settings"

@@ -52,20 +52,22 @@ Cogs and persistent views registered through `self.ctx` are removed automaticall
 
 ### Text generation
 
-The AI provider and its API key are the bot's settings, not any plugin's. A
-plugin asks for a completion:
+The AI provider and its API key are configured once, on the bot, under
+**Settings → AI Provider**. Every plugin that wants a model uses that one:
 
 ```python
 reply = await self.ctx.ai.complete(system_prompt, prompt)
 ```
 
-and gets text back. It never learns the key, and does not know which service
-answered — so one configured provider serves every plugin, and a plugin cannot
-leak a credential it was never given (by logging its own settings, say).
+Without this, each AI-using plugin would carry its own provider dropdown and
+its own copy of the key — three plugins meaning three places to paste the same
+key, and three places for them to drift out of step. One setting, one bill,
+one model for everything.
 
-Like the namespace boundary, this is a layer rather than a wall: plugin code
-runs in the bot's process and could still go looking. It removes the *accident*,
-not the *attack*.
+A plugin never receives the key as a side effect, which also means it cannot
+leak one by logging its own settings. That is a smaller benefit than it sounds:
+plugin code runs in the bot's process and could still go looking. It removes
+the accident, not the attack.
 
 ### Sources and trust
 

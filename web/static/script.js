@@ -658,7 +658,6 @@ function connectLogsWebSocket() {
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
     loadMusicBots();
-    toggleAiProviderFields();
     loadYouTubeOAuthStatus();
     initStats();
     connectLogsWebSocket();

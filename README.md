@@ -194,7 +194,7 @@ Once it's running:
 The client secret is required rather than optional: dashboard login is set up before
 the dashboard is ever reachable, so a fresh install is never briefly open.
 
-No `docker`/`docker compose` on the CLI required beyond the initial `make start` — everything else (modules, prefix, moderation, AI provider and key, translator provider, voice channel settings, embed templates, music worker bots) is managed from the dashboard.
+No `docker`/`docker compose` on the CLI required beyond the initial `make start` — everything else (installing and enabling plugins, their settings, the AI provider and key, embed templates, music worker bots) is managed from the dashboard.
 
 ### Without `make`
 
@@ -214,7 +214,7 @@ docker compose up -d --build
 | `DISCORD_CLIENT_SECRET` | Only for dashboard login | From the Developer Portal application's OAuth2 page. Can also be set from the dashboard |
 | `SESSION_SECRET_KEY` | No | Generated and saved automatically on first run; don't set it yourself |
 
-Everything else — module toggles, command prefix, AI provider/persona/prompt and API key, translator provider and keys, moderation and mod-log settings, temp-voice-channel IDs, music worker bot tokens, Server Protect's age/role/raid settings — lives in the SQLite database (`savedata/bot.db`) and is edited entirely through the web dashboard. Uploaded embed images are stored in `savedata/embeds/images/`.
+Everything else — which plugins are installed and enabled, their settings, the AI provider and its key, music worker bot tokens — lives in the SQLite database (`savedata/bot.db`) and the broker's store, and is edited entirely through the web dashboard. Uploaded embed images are stored in `savedata/embeds/images/`.
 
 ## Common commands
 

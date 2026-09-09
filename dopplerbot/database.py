@@ -278,7 +278,6 @@ async def init_db():
 
         default_settings = [
             # MAIN
-            ("prefix", "+", "Main"),
 
             # MODULES
 

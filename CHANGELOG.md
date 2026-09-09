@@ -40,6 +40,8 @@ features of its own and assembles them from a plugin source.
   bot at all. With both gone the bot loads nothing but plugins.
 - `DASHBOARD_URL` and `WEB_PORT` went with the `/web` command — nothing else
   read them.
+- Prefix commands are gone entirely: the bot is slash-only, so the command
+  prefix setting and discord.py's default `!help` went with them.
 
 ### Broker
 

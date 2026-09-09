@@ -49,12 +49,27 @@ async def resolve_token() -> str:
     return (await get_settings("discord_bot_token", "", category="Main") or "").strip()
 
 
-async def get_prefix(bot, message):
-    prefix = await get_settings("prefix", "+")
-    return prefix
+class DopplerBot(commands.Bot):
+    """Slash commands only.
 
-bot = commands.Bot(
-    command_prefix=get_prefix,
+    commands.Bot stays as the base class because plugins register cogs through
+    it, but prefix processing is switched off. With no prefix commands left,
+    every message would otherwise be parsed as a possible command and each
+    mention logged as CommandNotFound — and the AI plugin exists precisely to
+    be mentioned.
+    """
+
+    async def process_commands(self, message: discord.Message) -> None:
+        return
+
+
+# Required by the constructor and otherwise inert, since the override above
+# means it is never consulted.
+bot = DopplerBot(
+    command_prefix=commands.when_mentioned,
+    # discord.py registers a prefix-based !help by default; with prefix
+    # processing off it could never run, so it should not be registered.
+    help_command=None,
     intents=intents
 )
 
@@ -569,14 +584,6 @@ async def on_guild_join(guild: discord.Guild):
             await guild.leave()
         except discord.HTTPException as e:
             logging.error(f"Failed to leave guild {guild.id}: {e}")
-
-# ---------------------------------------------------------------------
-
-# COMMANDS
-@bot.command()
-async def ping(ctx):
-    user_mention = ctx.author.mention
-    await ctx.send(f"{user_mention}")
 
 # ---------------------------------------------------------------------
 

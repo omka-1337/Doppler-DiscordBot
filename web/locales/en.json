@@ -43,8 +43,6 @@
         "tab4": "🔑 API & System",
         "main_settings": {
             "title": "Main Settings",
-            "sub_title1": "Command prefix",
-            "description1": "The character that marks the beginning of the bot's text commands.",
             "sub_title2": "Home Guild ID",
             "description2": "This bot only operates in one server. Auto-locked to the first server it joins; leave it as-is unless you're deliberately moving the bot to a different server (the bot will leave any other server it's invited to).",
             "save": "💾 Save settings"

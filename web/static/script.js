@@ -1281,7 +1281,11 @@ window.addEventListener('message', async event => {
     if (msg.__doppler === 'bot') {
         try {
             const res = await fetch('/api/bot-info');
-            reply(await res.json());
+            const data = await res.json().catch(() => ({}));
+            // Without this a 404 resolves as if it were the bot's identity, and
+            // the page silently renders its placeholder instead of reporting.
+            if (!res.ok) reply(null, data.detail || `HTTP ${res.status}`);
+            else reply(data);
         } catch (e) {
             reply(null, String(e));
         }

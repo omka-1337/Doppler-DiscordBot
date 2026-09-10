@@ -226,6 +226,7 @@ async def get_dashboard(request: Request):
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
             "logged_in_username": request.session.get("username", ""),
+            "logged_in_avatar": request.session.get("avatar_url"),
         }
     )
 
@@ -982,9 +983,14 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     if not authorized:
         return deny(f"{user.get('username', 'That account')} isn't the server owner or an administrator.")
 
+    avatar_hash = user.get("avatar")
     request.session["authorized"] = True
     request.session["user_id"] = user_id
-    request.session["username"] = user.get("username", "")
+    request.session["username"] = user.get("global_name") or user.get("username", "")
+    request.session["avatar_url"] = (
+        f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
+        if avatar_hash else None
+    )
 
     return RedirectResponse("/")
 

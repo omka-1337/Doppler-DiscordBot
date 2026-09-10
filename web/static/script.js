@@ -539,7 +539,7 @@ async function refreshStats() {
         const statusDot = document.getElementById('statStatusDot');
         const statusText = document.getElementById('statStatus');
         const uptimeEl = document.getElementById('statUptime');
-        const guildsEl = document.getElementById('statGuilds');
+        const pluginsEl = document.getElementById('statPlugins');
         const latencyEl = document.getElementById('statLatency');
 
         if (data.bot) {
@@ -547,13 +547,13 @@ async function refreshStats() {
             if (statusDot) statusDot.className = `w-2.5 h-2.5 rounded-full ${online ? 'bg-green-500' : 'bg-red-500'}`;
             if (statusText) statusText.textContent = online ? 'Online' : 'Offline';
             if (uptimeEl) uptimeEl.textContent = formatUptime(data.bot.uptime_seconds);
-            if (guildsEl) guildsEl.textContent = data.bot.guild_count;
+            if (pluginsEl) pluginsEl.textContent = data.bot.plugins_running;
             if (latencyEl) latencyEl.textContent = data.bot.latency_ms !== null ? `${data.bot.latency_ms} ms` : '—';
         } else {
             if (statusDot) statusDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
             if (statusText) statusText.textContent = 'Unreachable';
             if (uptimeEl) uptimeEl.textContent = '—';
-            if (guildsEl) guildsEl.textContent = '—';
+            if (pluginsEl) pluginsEl.textContent = '—';
             if (latencyEl) latencyEl.textContent = '—';
         }
     } catch (err) {
@@ -1536,3 +1536,31 @@ async function saveProviders(section) {
     }
     loadProviders();
 }
+
+// ---------------------------------------------------------------------
+// USER MENU
+
+function toggleUserMenu(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('userMenu');
+    if (!menu) return;
+
+    const opening = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !opening);
+
+    const chevron = document.getElementById('userMenuChevron');
+    if (chevron) chevron.classList.toggle('rotate-180', opening);
+}
+
+function closeUserMenu() {
+    const menu = document.getElementById('userMenu');
+    if (menu) menu.classList.add('hidden');
+    const chevron = document.getElementById('userMenuChevron');
+    if (chevron) chevron.classList.remove('rotate-180');
+}
+
+// A menu that only closes by clicking the button again is a nuisance.
+document.addEventListener('click', closeUserMenu);
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeUserMenu();
+});

@@ -1,6 +1,7 @@
 {
     "main": {
-        "dashboard": "Dashboard"
+        "dashboard": "Dashboard",
+        "logout": "Log out"
     },
     "tabs": {
         "stats": "📊 Stats",
@@ -12,7 +13,7 @@
     "stats": {
         "status": "Status",
         "uptime": "Uptime",
-        "guilds": "Guilds",
+        "plugins": "Active plugins",
         "latency": "Latency",
         "cpu": "CPU (host)",
         "ram": "RAM (host)",

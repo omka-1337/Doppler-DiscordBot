@@ -238,7 +238,12 @@ async def handle_stats(request):
         "version": __version__,
         "started_at": STARTED_AT.isoformat(),
         "uptime_seconds": uptime_seconds,
+        # Not shown on the dashboard -- the bot locks itself to one guild, so the
+        # number says nothing there -- but first-run setup waits on it to know
+        # whether the bot has been invited anywhere yet.
         "guild_count": len(bot.guilds),
+        "plugins_running": len(bot.plugins.loaded),
+        "plugins_total": len(bot.plugins.manifests),
         "latency_ms": round(bot.latency * 1000) if not math.isnan(bot.latency) else None,
         "connected": not bot.is_closed(),
     })

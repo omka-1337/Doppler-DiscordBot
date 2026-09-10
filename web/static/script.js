@@ -1809,6 +1809,22 @@ window.addEventListener('message', async event => {
     }
 });
 
+function switchEmbedView(view) {
+    document.querySelectorAll('.embed-view').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.embed-view-btn').forEach(btn => {
+        btn.className = 'embed-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
+    });
+
+    const pane = document.getElementById(`embed-view-${view}`);
+    if (pane) {
+        pane.classList.remove('hidden');
+        if (pane.dataset.plugin) openPluginPage(pane);
+    }
+
+    const btn = document.getElementById(`embed-view-btn-${view}`);
+    if (btn) btn.className = 'embed-view-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white';
+}
+
 async function loadPluginPages() {
     let pages;
     try {
@@ -1819,35 +1835,67 @@ async function loadPluginPages() {
         return;
     }
 
+    pages.forEach(page => (page.tab ? mountPageInTab(page) : mountPageAsTab(page)));
+}
+
+// A page that names an existing tab becomes a sub-view of it, beside whatever
+// the dashboard already shows there.
+function mountPageInTab(page) {
+    const host = document.getElementById(`tab-${page.tab}`);
+    const bar = document.getElementById(`${page.tab}SubTabs`);
+    if (!host || !bar) {
+        mountPageAsTab(page);   // the tab it asked for does not exist
+        return;
+    }
+
+    const view = `plugin-${page.plugin}`;
+    if (document.getElementById(`embed-view-${view}`)) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = `embed-view-btn-${view}`;
+    btn.className = 'embed-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
+    btn.textContent = `${page.icon} ${page.title}`;
+    btn.addEventListener('click', () => switchEmbedView(view));
+    bar.appendChild(btn);
+
+    const pane = document.createElement('div');
+    pane.id = `embed-view-${view}`;
+    pane.className = 'embed-view hidden';
+    pane.dataset.plugin = page.plugin;
+    pane.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
+    host.appendChild(pane);
+}
+
+// Otherwise the page gets a top-level tab to itself.
+function mountPageAsTab(page) {
     const settingsBtn = document.getElementById('btn-settings');
     const navBar = settingsBtn ? settingsBtn.parentElement : null;
     const main = document.querySelector('main');
     if (!navBar || !main) return;
 
-    pages.forEach(page => {
-        const tabName = `plugin-${page.plugin}`;
-        if (document.getElementById(`tab-${tabName}`)) return;
+    const tabName = `plugin-${page.plugin}`;
+    if (document.getElementById(`tab-${tabName}`)) return;
 
-        const btn = document.createElement('button');
-        btn.id = `btn-${tabName}`;
-        btn.className = 'tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]';
-        btn.textContent = `${page.icon} ${page.title}`;
-        btn.addEventListener('click', () => switchTab(tabName));
-        navBar.insertBefore(btn, settingsBtn);
+    const btn = document.createElement('button');
+    btn.id = `btn-${tabName}`;
+    btn.className = 'tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]';
+    btn.textContent = `${page.icon} ${page.title}`;
+    btn.addEventListener('click', () => switchTab(tabName));
+    navBar.insertBefore(btn, settingsBtn);
 
-        const pane = document.createElement('div');
-        pane.id = `tab-${tabName}`;
-        pane.className = 'tab-content hidden';
-        pane.dataset.plugin = page.plugin;
-        pane.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
-        main.appendChild(pane);
-    });
+    const pane = document.createElement('div');
+    pane.id = `tab-${tabName}`;
+    pane.className = 'tab-content hidden';
+    pane.dataset.plugin = page.plugin;
+    pane.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
+    main.appendChild(pane);
 }
 
 // Loaded on first open rather than up front: a page nobody visits should not
 // cost a request, and its scripts should not be running in the background.
-async function openPluginPage(tabName) {
-    const pane = document.getElementById(`tab-${tabName}`);
+async function openPluginPage(pane) {
+    if (typeof pane === 'string') pane = document.getElementById(`tab-${pane}`);
     if (!pane || pane.dataset.loaded) return;
 
     const pluginId = pane.dataset.plugin;

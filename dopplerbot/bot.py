@@ -448,6 +448,7 @@ async def handle_list_plugin_pages(request):
                 "plugin": plugin_id,
                 "title": page.title,
                 "icon": page.icon,
+                "tab": page.tab,
                 "plugin_name": entry.manifest.name,
             })
     return web.json_response({"status": "ok", "pages": pages})

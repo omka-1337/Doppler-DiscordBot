@@ -41,9 +41,14 @@ class PagePlugin:
     title: str
     entry: str
     icon: str = "🧩"
+    # Which dashboard tab to appear inside, as a sub-tab. Without it the page
+    # gets a top-level tab of its own. A plugin that extends an area the
+    # dashboard already has -- the embed builder -- belongs beside it, not in a
+    # separate place the operator has to know to look in.
+    tab: str = ""
 
     def to_dict(self) -> dict:
-        return {"title": self.title, "entry": self.entry, "icon": self.icon}
+        return {"title": self.title, "entry": self.entry, "icon": self.icon, "tab": self.tab}
 
 
 @dataclass(frozen=True)
@@ -268,7 +273,11 @@ def _parse_page(data: dict, plugin_id: str, path: Path | None) -> "PagePlugin | 
     if not title:
         raise PluginManifestError(f"{plugin_id!r}: 'page' declares no title.")
 
-    return PagePlugin(title=title, entry=entry, icon=str(raw.get("icon", "🧩")))
+    tab = str(raw.get("tab", "")).strip()
+    if tab and not re.fullmatch(r"[a-z][a-z0-9\-]{0,31}", tab):
+        raise PluginManifestError(f"{plugin_id!r}: invalid page tab {tab!r}.")
+
+    return PagePlugin(title=title, entry=entry, icon=str(raw.get("icon", "🧩")), tab=tab)
 
 
 def parse_manifest(data: dict, path: Path | None = None) -> PluginManifest:

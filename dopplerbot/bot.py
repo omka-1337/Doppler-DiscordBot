@@ -13,6 +13,7 @@ from dopplerbot.database import init_db, get_settings, set_settings, close_db
 from dopplerbot.plugins import PluginRegistry
 from dopplerbot.plugins import endpoints as plugin_endpoints
 from dopplerbot.plugins import trust as plugin_trust
+from dopplerbot.plugins.manifest import CURRENT_API_VERSION
 
 load_dotenv()
 
@@ -246,7 +247,9 @@ async def handle_stats(request):
         "guild_count": len(bot.guilds),
         "plugins_running": len(bot.plugins.loaded),
         "plugins_total": len(bot.plugins.manifests),
-        "latency_ms": round(bot.latency * 1000) if not math.isnan(bot.latency) else None,
+        # Before the gateway connects this is inf, not nan, which the previous
+        # isnan() guard let through and round() then refused.
+        "latency_ms": round(bot.latency * 1000) if math.isfinite(bot.latency) else None,
         "connected": not bot.is_closed(),
     })
 
@@ -578,6 +581,55 @@ async def enforce_home_guild():
                 await guild.leave()
             except discord.HTTPException as e:
                 logging.error(f"Failed to leave guild {guild.id}: {e}")
+
+# ---------------------------------------------------------------------
+
+# THE BOT'S OWN COMMANDS
+# Everything else comes from plugins; this is the one command the bot itself
+# provides, so an operator can read the running versions from inside Discord
+# without opening the dashboard.
+@bot.tree.command(name="bot-info", description="Show the bot, plugin API and installed plugin versions.")
+@discord.app_commands.default_permissions(manage_guild=True)
+async def bot_info(interaction: discord.Interaction):
+    running = sorted(bot.plugins.loaded.items())
+
+    embed = discord.Embed(
+        title="Doppler",
+        colour=discord.Colour.blurple(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.add_field(name="Bot version", value=f"`{__version__}`", inline=True)
+    embed.add_field(name="Plugin API", value=f"`{CURRENT_API_VERSION}`", inline=True)
+    embed.add_field(name="discord.py", value=f"`{discord.__version__}`", inline=True)
+
+    if running:
+        # A guild can install more plugins than one field can hold, and Discord
+        # rejects the whole message rather than truncating it.
+        lines = [
+            f"{entry.manifest.icon} **{entry.manifest.name}** `{entry.manifest.version}`"
+            for _, entry in running
+        ]
+        block, shown = "", 0
+        for line in lines:
+            if len(block) + len(line) + 1 > 1024:
+                break
+            block += line + "\n"
+            shown += 1
+        if shown < len(lines):
+            block += f"...and {len(lines) - shown} more"
+        embed.add_field(name=f"Active plugins ({len(running)})", value=block, inline=False)
+    else:
+        embed.add_field(name="Active plugins (0)", value="No plugins are running.", inline=False)
+
+    total = len(bot.plugins.manifests)
+    if total > len(running):
+        embed.set_footer(text=f"{total - len(running)} installed but not running")
+
+    if bot.user and bot.user.display_avatar:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 # ---------------------------------------------------------------------
 

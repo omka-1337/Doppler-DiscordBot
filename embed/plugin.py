@@ -97,4 +97,17 @@ class EmbedPlugin(Plugin):
     SETTINGS = ()
 
     async def setup(self):
-        await self.ctx.add_cog(EmbedCog(self))
+        self.cog = EmbedCog(self)
+        await self.ctx.add_cog(self.cog)
+
+        # The builder is a page, not a form, so it cannot be generated from a
+        # settings schema -- it gets what it needs from this plugin instead.
+        try:
+            self.ctx.add_endpoint("GET", "/templates", self.list_templates)
+        except PermissionError as e:
+            # Untrusted plugins may not declare endpoints. The commands still
+            # work; only the builder's own page would be unavailable.
+            self.log.warning("%s", e)
+
+    async def list_templates(self, request):
+        return {"templates": self.cog._list_template_names()}

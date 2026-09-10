@@ -115,8 +115,22 @@ function addCard() {
     addImageBtn.textContent = '🖼️ Add image';
     addImageBtn.addEventListener('click', () => addImageBlock(blocksDiv));
 
+    const addThumbBtn = document.createElement('button');
+    addThumbBtn.type = 'button';
+    addThumbBtn.className = 'text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold';
+    addThumbBtn.textContent = '🏞️ Add thumbnail';
+    addThumbBtn.addEventListener('click', () => addThumbnailBlock(blocksDiv));
+
+    const addLinksBtn = document.createElement('button');
+    addLinksBtn.type = 'button';
+    addLinksBtn.className = 'text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold';
+    addLinksBtn.textContent = '🔗 Add buttons';
+    addLinksBtn.addEventListener('click', () => addButtonsBlock(blocksDiv));
+
     addButtonsWrap.appendChild(addTextBtn);
     addButtonsWrap.appendChild(addImageBtn);
+    addButtonsWrap.appendChild(addThumbBtn);
+    addButtonsWrap.appendChild(addLinksBtn);
     row.appendChild(addButtonsWrap);
 
     cardsContainer.appendChild(row);
@@ -158,19 +172,15 @@ function addTextBlock(blocksDiv) {
     updatePreview();
 }
 
-function addImageBlock(blocksDiv) {
-    const row = document.createElement('div');
-    row.className = 'block-row bg-[#2b2d31] border border-[#3f4147] rounded p-2';
-    row.dataset.type = 'image';
-    row.id = `block-${blockCounter++}`;
-    addBlockShell(row, '🖼️', 'Image');
-
+// Shared by the image and thumbnail blocks: a URL field plus an upload, either
+// of which supplies the block's media. Typing a URL clears a previous upload,
+// and uploading clears the URL, so a block never carries both.
+function addMediaInputs(row) {
     const urlInput = document.createElement('input');
     urlInput.type = 'text';
-    urlInput.className = 'block-image-url w-full bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition';
+    urlInput.className = 'block-media-url w-full bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition';
     urlInput.placeholder = 'https://example.com/image.png';
     urlInput.addEventListener('input', () => {
-        // Typing a URL by hand supersedes a previously uploaded file for this block.
         delete row.dataset.attachment;
         updatePreview();
     });
@@ -226,6 +236,105 @@ function addImageBlock(blocksDiv) {
             status.className = 'text-[11px] mt-1 text-red-400';
         }
     });
+}
+
+function addImageBlock(blocksDiv) {
+    const row = document.createElement('div');
+    row.className = 'block-row bg-[#2b2d31] border border-[#3f4147] rounded p-2';
+    row.dataset.type = 'image';
+    row.id = `block-${blockCounter++}`;
+    addBlockShell(row, '🖼️', 'Image');
+
+    addMediaInputs(row);
+
+    blocksDiv.appendChild(row);
+    updatePreview();
+}
+
+// A thumbnail is not a standalone component in Discord: it is an accessory on a
+// section of text, so this block asks for both.
+function addThumbnailBlock(blocksDiv) {
+    const row = document.createElement('div');
+    row.className = 'block-row bg-[#2b2d31] border border-[#3f4147] rounded p-2';
+    row.dataset.type = 'thumbnail';
+    row.id = `block-${blockCounter++}`;
+    addBlockShell(row, '🏞️', 'Thumbnail + text');
+
+    const textarea = document.createElement('textarea');
+    textarea.rows = 2;
+    textarea.className = 'block-text-content w-full bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition mb-1.5';
+    textarea.placeholder = 'Text shown beside the thumbnail (Markdown supported)';
+    textarea.addEventListener('input', updatePreview);
+    row.appendChild(textarea);
+
+    addMediaInputs(row);
+
+    blocksDiv.appendChild(row);
+    updatePreview();
+}
+
+// Link buttons only. Coloured styles need something to answer the click, and a
+// saved template has nobody to do that once the bot has restarted.
+function addButtonsBlock(blocksDiv) {
+    const row = document.createElement('div');
+    row.className = 'block-row bg-[#2b2d31] border border-[#3f4147] rounded p-2';
+    row.dataset.type = 'buttons';
+    row.id = `block-${blockCounter++}`;
+    addBlockShell(row, '🔗', 'Link buttons');
+
+    const list = document.createElement('div');
+    list.className = 'button-list space-y-1.5';
+    row.appendChild(list);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold mt-1.5';
+    addBtn.textContent = '＋ Add button';
+
+    const addButtonRow = () => {
+        if (list.children.length >= 5) return;   // Discord's limit for one row
+
+        const item = document.createElement('div');
+        item.className = 'button-item flex gap-1.5 items-center';
+
+        const label = document.createElement('input');
+        label.type = 'text';
+        label.className = 'button-label w-1/3 bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition';
+        label.placeholder = 'Label';
+        label.addEventListener('input', updatePreview);
+
+        const url = document.createElement('input');
+        url.type = 'text';
+        url.className = 'button-url flex-1 bg-[#1e1f22] border border-[#3f4147] rounded p-1.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition';
+        url.placeholder = 'https://example.com';
+        url.addEventListener('input', updatePreview);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'text-gray-500 hover:text-red-400 transition text-xs px-1';
+        remove.textContent = '✕';
+        remove.addEventListener('click', () => {
+            item.remove();
+            addBtn.disabled = false;
+            addBtn.classList.remove('opacity-40');
+            updatePreview();
+        });
+
+        item.appendChild(label);
+        item.appendChild(url);
+        item.appendChild(remove);
+        list.appendChild(item);
+
+        if (list.children.length >= 5) {
+            addBtn.disabled = true;
+            addBtn.classList.add('opacity-40');
+        }
+        updatePreview();
+    };
+
+    addBtn.addEventListener('click', addButtonRow);
+    row.appendChild(addBtn);
+    addButtonRow();
 
     blocksDiv.appendChild(row);
     updatePreview();
@@ -246,14 +355,29 @@ function collectBlocksFrom(blocksDiv) {
             const content = row.querySelector('.block-text-content').value.trim();
             if (content) blocks.push({ type: 'text', content });
 
-        } else if (type === 'image') {
+        } else if (type === 'image' || type === 'thumbnail') {
             const attachment = row.dataset.attachment;
-            const url = row.querySelector('.block-image-url').value.trim();
-            if (attachment) {
-                blocks.push({ type: 'image', attachment });
-            } else if (url) {
-                blocks.push({ type: 'image', url });
+            const url = row.querySelector('.block-media-url').value.trim();
+            const media = attachment ? { attachment } : (url ? { url } : null);
+            if (!media) return;
+
+            if (type === 'image') {
+                blocks.push({ type: 'image', ...media });
+            } else {
+                // A thumbnail without text has nothing to sit beside, and
+                // Discord will not render the section at all.
+                const content = row.querySelector('.block-text-content').value.trim();
+                if (content) blocks.push({ type: 'thumbnail', content, ...media });
             }
+
+        } else if (type === 'buttons') {
+            const buttons = [];
+            row.querySelectorAll('.button-item').forEach(item => {
+                const label = item.querySelector('.button-label').value.trim();
+                const url = item.querySelector('.button-url').value.trim();
+                if (label && url) buttons.push({ label, url });
+            });
+            if (buttons.length) blocks.push({ type: 'buttons', buttons });
         }
     });
 
@@ -316,6 +440,41 @@ function updatePreview() {
                     img.className = 'rounded max-w-full max-h-64 object-cover mb-2 last:mb-0';
                     cardEl.appendChild(img);
                 }
+
+            } else if (block.type === 'thumbnail') {
+                // Discord puts the thumbnail to the right of its text.
+                const wrap = document.createElement('div');
+                wrap.className = 'flex gap-3 items-start mb-2 last:mb-0';
+
+                const p = document.createElement('p');
+                p.className = 'text-gray-300 text-sm whitespace-pre-line break-words flex-1';
+                p.textContent = block.content;
+                wrap.appendChild(p);
+
+                const src = block.attachment ? `/embed-images/${block.attachment}` : block.url;
+                if (src) {
+                    const img = document.createElement('img');
+                    img.src = src;
+                    img.alt = '';
+                    img.className = 'rounded w-20 h-20 object-cover flex-shrink-0';
+                    wrap.appendChild(img);
+                }
+                cardEl.appendChild(wrap);
+
+            } else if (block.type === 'buttons') {
+                const rowEl = document.createElement('div');
+                rowEl.className = 'flex flex-wrap gap-2 mb-2 last:mb-0';
+                block.buttons.forEach(b => {
+                    const btn = document.createElement('span');
+                    btn.className = 'bg-[#4e5058] text-white text-xs font-medium px-3 py-1.5 rounded flex items-center gap-1';
+                    btn.textContent = b.label;
+                    const icon = document.createElement('span');
+                    icon.className = 'text-[10px] opacity-70';
+                    icon.textContent = '↗';
+                    btn.appendChild(icon);
+                    rowEl.appendChild(btn);
+                });
+                cardEl.appendChild(rowEl);
             }
         });
 

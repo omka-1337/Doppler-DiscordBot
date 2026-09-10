@@ -7,6 +7,10 @@ from discord.ext import commands
 from dopplerbot.plugins.api import Plugin
 
 
+# Discord's own limit for one action row.
+MAX_BUTTONS_PER_ROW = 5
+
+
 class EmbedCog(commands.Cog):
     def __init__(self, plugin: "EmbedPlugin"):
         self.plugin = plugin
@@ -16,24 +20,29 @@ class EmbedCog(commands.Cog):
         self.embeds_dir = plugin.ctx.savedata_dir / "embeds"
         self.images_dir = self.embeds_dir / "images"
 
+    def _resolve_media(self, block: dict, files: list, missing: list):
+        """An uploaded file or a plain URL, whichever the block carries."""
+        attachment_name = block.get("attachment")
+        if attachment_name:
+            path = self.images_dir / attachment_name
+            if not path.exists():
+                missing.append(attachment_name)
+                return None
+            image_file = discord.File(path, filename=attachment_name)
+            files.append(image_file)
+            return image_file
+
+        url = (block.get("url") or "").strip()
+        return url or None
+
     def _list_template_names(self) -> list[str]:
         if not self.embeds_dir.exists():
             return []
         return sorted(p.stem for p in self.embeds_dir.glob("*.json"))
 
-    @app_commands.command(name="embed", description="Send a saved embed template")
-    @app_commands.describe(name="The saved template name")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def send_embed(self, interaction: discord.Interaction, name: str):
-        file_path = self.embeds_dir / f"{name}.json"
-
-        if not file_path.exists():
-            await interaction.response.send_message(f"The `{name}` template was not found", ephemeral=True)
-            return
-
-        with open(file_path, "r", encoding="utf-8") as f:
-            layout_data = json.load(f)
-
+    def build_view(self, layout_data: dict):
+        """Turn a saved template into a LayoutView, the files it needs,
+        and the names of any uploads that have gone missing."""
         view = discord.ui.LayoutView()
         files = []
         missing_images = []
@@ -51,23 +60,57 @@ class EmbedCog(commands.Cog):
                     if content:
                         container.add_item(discord.ui.TextDisplay(content))
 
-                elif block_type == "image":
-                    attachment_name = block.get("attachment")
-                    url = block.get("url")
+                elif block_type == "thumbnail":
+                    # A thumbnail is a Section accessory, not a standalone
+                    # component: Discord always pairs it with the text it sits
+                    # beside, so the block carries both.
+                    media = self._resolve_media(block, files, missing_images)
+                    content = (block.get("content") or "").strip()
+                    if media is not None and content:
+                        container.add_item(
+                            discord.ui.Section(
+                                discord.ui.TextDisplay(content),
+                                accessory=discord.ui.Thumbnail(media=media),
+                            )
+                        )
 
-                    if attachment_name:
-                        image_path = self.images_dir / attachment_name
-                        if image_path.exists():
-                            image_file = discord.File(image_path, filename=attachment_name)
-                            files.append(image_file)
-                            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(media=image_file)))
-                        else:
-                            missing_images.append(attachment_name)
-                    elif url:
-                        container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(media=url)))
+                elif block_type == "buttons":
+                    row = discord.ui.ActionRow()
+                    for button in (block.get("buttons") or [])[:MAX_BUTTONS_PER_ROW]:
+                        label = (button.get("label") or "").strip()
+                        url = (button.get("url") or "").strip()
+                        # Link buttons only. Any other style needs something to
+                        # answer the click, and a saved template has nobody to
+                        # do that once the process that sent it has restarted.
+                        if label and url.startswith(("http://", "https://")):
+                            row.add_item(discord.ui.Button(label=label, url=url))
+                    if row.children:
+                        container.add_item(row)
+
+                elif block_type == "image":
+                    media = self._resolve_media(block, files, missing_images)
+                    if media is not None:
+                        container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(media=media)))
 
             if container.children:
                 view.add_item(container)
+
+        return view, files, missing_images
+
+    @app_commands.command(name="embed", description="Send a saved embed template")
+    @app_commands.describe(name="The saved template name")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def send_embed(self, interaction: discord.Interaction, name: str):
+        file_path = self.embeds_dir / f"{name}.json"
+
+        if not file_path.exists():
+            await interaction.response.send_message(f"The `{name}` template was not found", ephemeral=True)
+            return
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            layout_data = json.load(f)
+
+        view, files, missing_images = self.build_view(layout_data)
 
         if not view.children:
             await interaction.response.send_message(f"The `{name}` template has no content to send.", ephemeral=True)

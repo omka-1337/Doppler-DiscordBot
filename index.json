@@ -16,9 +16,9 @@
     {
       "id": "embed",
       "name": "Embed Sender",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "api_version": "1.0",
-      "description": "Sends the rich Components V2 messages built in the dashboard's Embed Builder, via /embed <name>.",
+      "description": "Sends the rich Components V2 messages built in the dashboard's Embed Builder, via /embed <name>. Supports text, images, thumbnails and link buttons.",
       "author": "Doppler",
       "icon": "🛠️",
       "requirements": [],

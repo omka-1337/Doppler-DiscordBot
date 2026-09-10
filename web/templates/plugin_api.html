@@ -41,6 +41,7 @@
                 <a href="#plugin-class" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">The Plugin class</a>
                 <a href="#settings" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Settings</a>
                 <a href="#context" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">The context</a>
+                <a href="#pages" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Pages</a>
                 <a href="#services" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Sidecar services</a>
                 <a href="#publishing" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Publishing</a>
                 <a href="#limits" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">What plugins may do</a>
@@ -154,6 +155,7 @@ class HelloPlugin(Plugin):
                             <tr><td class="px-4 py-2.5 font-mono text-indigo-300">homepage</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5"></td></tr>
                             <tr><td class="px-4 py-2.5 font-mono text-indigo-300">requirements</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">pip packages you need. <strong>Shown, not installed</strong> — pulling packages on the operator's behalf is their decision, not the plugin's.</td></tr>
                             <tr><td class="px-4 py-2.5 font-mono text-indigo-300">default_enabled</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">Whether it starts on the first time it is seen. Defaults to true.</td></tr>
+                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">page</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">A settings page of your own — see <a href="#pages" class="text-indigo-400 hover:underline">below</a>. An object with <code>title</code>, <code>entry</code> (an <code>.html</code> file in your folder) and an optional <code>icon</code>.</td></tr>
                             <tr><td class="px-4 py-2.5 font-mono text-indigo-300">services</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">Sidecar containers — see <a href="#services" class="text-indigo-400 hover:underline">below</a>.</td></tr>
                         </tbody>
                     </table>
@@ -360,6 +362,66 @@ self.ctx.add_endpoint("GET", "/items", self.list_items)</pre>
                         </p>
                     </div>
                 </div>
+            </section>
+
+            <!-- PAGES -->
+            <section id="pages" class="anchor">
+                <h2 class="text-2xl font-bold text-white mb-3">Pages</h2>
+                <p class="text-sm text-gray-300 leading-relaxed mb-4">
+                    When a generated settings form cannot express your UI, ship an HTML file and
+                    declare it in the manifest. It gets its own tab in the dashboard, which appears
+                    when the plugin starts and disappears when it stops.
+                </p>
+
+                <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-4">"page": {
+    "title": "Embed Builder",
+    "entry": "page.html",
+    "icon": "\ud83d\udee0\ufe0f"
+}</pre>
+
+                <p class="text-xs text-gray-400 leading-relaxed mb-4">
+                    The file is served into an iframe with <code>sandbox="allow-scripts"</code> and no
+                    <code>allow-same-origin</code>, so the page runs on an opaque origin. It cannot read
+                    the dashboard's cookies, its DOM, or any dashboard route. Everything it needs comes
+                    through <code>window.doppler</code>, injected ahead of your own markup.
+                </p>
+
+                <div class="space-y-3">
+                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
+                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">doppler.call(method, path, body)</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
+                            Calls one of <em>your</em> endpoints, declared with
+                            <code>ctx.add_endpoint</code>. The host prefixes your plugin id, so a page
+                            cannot name another plugin's endpoint or a dashboard route. Resolves with the
+                            decoded JSON, and rejects on any error response.
+                        </p>
+                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">const data = await doppler.call('POST', '/save', payload);</pre>
+                    </div>
+
+                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
+                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">doppler.bot()</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
+                            The bot's own identity, for pages that preview what a message will look
+                            like. Read-only, and identical for every page, so it comes from the host
+                            rather than each plugin serving its own copy. Resolves with
+                            <code>username</code>, <code>global_name</code> and <code>avatar_url</code>
+                            — the last is <code>null</code> when the bot has no avatar set.
+                        </p>
+                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">const bot = await doppler.bot();
+nameEl.textContent = bot.global_name || bot.username;
+if (bot.avatar_url) avatarEl.src = bot.avatar_url;</pre>
+                        <p class="text-[11px] text-gray-500 leading-relaxed mt-2">
+                            Added in API 1.1. Both calls reject rather than resolving with an error
+                            body, so wrap them and keep a sensible placeholder for when they fail.
+                        </p>
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-amber-300/90 leading-relaxed mt-3">
+                    Trusted sources only, for the same reason as <code>ctx.add_endpoint</code>: the page
+                    is rendered by the dashboard for a logged-in operator. A plugin from an untrusted
+                    source keeps its settings form and simply gets no tab.
+                </p>
             </section>
 
             <!-- SERVICES -->

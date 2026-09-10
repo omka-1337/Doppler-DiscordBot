@@ -1,7 +1,7 @@
 {
   "id": "embed",
   "name": "Embed Sender",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "api_version": "1.0",
   "description": "Sends the rich Components V2 messages built in the dashboard's Embed Builder, via /embed <name>. Supports text, images, thumbnails and link buttons.",
   "author": "Doppler",
@@ -9,8 +9,9 @@
   "entrypoint": "plugin.py",
   "default_enabled": true,
   "page": {
-    "title": "Embed Templates",
+    "title": "Templates",
     "entry": "page.html",
-    "icon": "🗂️"
+    "icon": "🗂️",
+    "tab": "embeds"
   }
 }

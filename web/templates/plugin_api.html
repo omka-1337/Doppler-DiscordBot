@@ -323,6 +323,26 @@ result.text, result.source_lang, result.provider</pre>
                     </div>
 
                     <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
+                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.add_endpoint(method, path, handler)</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
+                            Expose an HTTP endpoint at <code>/api/plugin/&lt;id&gt;&lt;path&gt;</code>, behind
+                            the dashboard's login. For settings a generated form cannot express. The handler
+                            takes an <code>aiohttp.web.Request</code>; returning a dict is shorthand for a
+                            JSON response. Removed automatically when the plugin unloads.
+                        </p>
+                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">async def list_items(self, request):
+    return {"items": [...]}
+
+self.ctx.add_endpoint("GET", "/items", self.list_items)</pre>
+                        <p class="text-[11px] text-amber-300/90 leading-relaxed mt-2">
+                            Trusted sources only. The endpoint answers on the dashboard's own origin with the
+                            operator's session attached, so it is not granted to code whose author has not been
+                            vouched for. Raises <code>PermissionError</code> otherwise — catch it and carry on
+                            if the rest of your plugin works without the page.
+                        </p>
+                    </div>
+
+                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
                         <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.data_dir · ctx.savedata_dir</h3>
                         <p class="text-xs text-gray-400 leading-relaxed">
                             <code>data_dir</code> is a private folder for your files, created on first

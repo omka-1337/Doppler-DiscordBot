@@ -11,6 +11,7 @@ from aiohttp import web
 from dopplerbot import __version__
 from dopplerbot.database import init_db, get_settings, set_settings, close_db
 from dopplerbot.plugins import PluginRegistry
+from dopplerbot.plugins import endpoints as plugin_endpoints
 
 load_dotenv()
 
@@ -432,6 +433,38 @@ async def handle_uninstall_plugin(request):
 
 # ---------------------------------------------------------------------
 
+# PLUGIN-DECLARED ENDPOINTS
+# Registered in a lookup table rather than the router: aiohttp freezes its
+# router once the app is running, and plugins come and go long after that.
+async def handle_plugin_endpoint(request):
+    plugin_id = request.match_info["plugin_id"]
+    path = "/" + request.match_info.get("tail", "")
+
+    handler = plugin_endpoints.lookup(plugin_id, request.method, path)
+    if handler is None:
+        return web.json_response(
+            {"status": "error", "message": f"No {request.method} {path} declared by {plugin_id!r}."},
+            status=404,
+        )
+
+    try:
+        result = await handler(request)
+    except Exception as e:
+        logging.exception("Plugin endpoint %s %s failed", request.method, path)
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+    # Returning a dict is shorthand; anything else is passed through as the
+    # plugin's own response.
+    if isinstance(result, dict):
+        return web.json_response(result)
+    return result
+
+
+async def handle_list_plugin_endpoints(request):
+    return web.json_response({"status": "ok", "endpoints": plugin_endpoints.declared()})
+
+# ---------------------------------------------------------------------
+
 # START INTERNAL API
 async def start_internal_api():
     app = web.Application()
@@ -456,6 +489,8 @@ async def start_internal_api():
     app.router.add_get("/internal/catalog", handle_catalog)
     app.router.add_post("/internal/plugins/install", handle_install_plugin)
     app.router.add_post("/internal/plugins/uninstall", handle_uninstall_plugin)
+    app.router.add_get("/internal/plugin-endpoints", handle_list_plugin_endpoints)
+    app.router.add_route("*", "/internal/plugin/{plugin_id}/{tail:.*}", handle_plugin_endpoint)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
     # stats tab) — per-request access logs here are just noise in latest.log.
     runner = web.AppRunner(app, access_log=None)

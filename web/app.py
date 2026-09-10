@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, UploadFile, File, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -749,6 +749,46 @@ async def install_plugin(payload: InstallPayload):
 @app.post("/api/plugins/uninstall")
 async def uninstall_plugin(payload: PluginActionPayload):
     return JSONResponse(await _call_bot("POST", "/internal/plugins/uninstall", {"plugin": payload.plugin}))
+
+@app.get("/api/plugin-endpoints")
+async def list_plugin_endpoints():
+    """What the installed plugins expose, so a plugin's own page can find it."""
+    return JSONResponse(await _call_bot("GET", "/internal/plugin-endpoints"))
+
+
+# Singular "plugin" on purpose: /api/plugins/* is the plugin management API, and
+# a catch-all there would shadow it.
+@app.api_route("/api/plugin/{plugin_id}/{path:path}",
+               methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def call_plugin_endpoint(plugin_id: str, path: str, request: Request):
+    """Forward to a plugin's own endpoint, behind the dashboard's login.
+
+    The body is streamed through untouched so a plugin can accept uploads as
+    well as JSON.
+    """
+    url = f"{BOT_INTERNAL_API}/internal/plugin/{plugin_id}/{path}"
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() in ("content-type", "accept")
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                request.method, url,
+                content=await request.body(),
+                params=dict(request.query_params),
+                headers=headers,
+                timeout=60.0,
+            )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Bot is not reachable: {e}") from e
+
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        media_type=response.headers.get("content-type"),
+    )
 
 # ----------------------------MUSIC BOTS-------------------------------
 

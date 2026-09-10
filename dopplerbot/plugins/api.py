@@ -40,6 +40,8 @@ from dopplerbot import translate as core_translate
 from dopplerbot.ai import AIError  # re-exported for plugins
 from dopplerbot.translate import TranslationError, TranslationResult  # re-exported for plugins
 from dopplerbot.database import SAVEDATA_DIR, get_settings, get_settings_by_category, set_settings
+from dopplerbot.plugins import endpoints as plugin_endpoints
+from dopplerbot.plugins import trust
 from dopplerbot.plugins.db import PluginDatabase
 from dopplerbot.plugins.manifest import PluginManifest, ServiceSpec
 
@@ -360,6 +362,7 @@ class PluginContext:
         # is what makes reloading a plugin without restarting the bot work.
         self._cogs: list[str] = []
         self._views: list[discord.ui.View] = []
+        self._endpoints: list[tuple[str, str]] = []
 
     @property
     def data_dir(self) -> Path:
@@ -388,6 +391,28 @@ class PluginContext:
         """
         return SAVEDATA_DIR
 
+    def add_endpoint(self, method: str, path: str, handler) -> str:
+        """Expose an HTTP endpoint at ``/api/plugin/<id><path>`` on the dashboard.
+
+        For settings a generated form cannot express -- the embed builder, for
+        one. The handler takes an ``aiohttp.web.Request``; returning a dict is
+        shorthand for a JSON response.
+
+        Only a plugin installed from a trusted source may do this. Its endpoint
+        answers behind the dashboard's login, on the dashboard's own origin, so
+        granting it to code whose author has not been vouched for would hand
+        that code the operator's session.
+        """
+        if not trust.is_trusted(self.id):
+            raise PermissionError(
+                f"{self.id!r} came from an untrusted source and may not declare endpoints. "
+                "Mark its source trusted in the dashboard to allow this."
+            )
+
+        url = plugin_endpoints.register(self.id, method, path, handler)
+        self._endpoints.append((method.upper(), path))
+        return url
+
     async def add_cog(self, cog: "commands.Cog"):
         """Register a cog and remember it, so unload can take it back out."""
         await self.bot.add_cog(cog)
@@ -400,6 +425,11 @@ class PluginContext:
 
     async def _unregister(self):
         """Undo every registration made through this context."""
+        if self._endpoints:
+            removed = plugin_endpoints.unregister_plugin(self.id)
+            self.log.info("Removed %d endpoint(s).", removed)
+            self._endpoints.clear()
+
         if self._db is not None:
             await self._db.close()
             self._db = None

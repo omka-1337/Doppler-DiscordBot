@@ -64,19 +64,17 @@
                 </h2>
 
                 <div class="flex gap-4">
-                    <!-- Chat avatar -->
-                    
-                    <img src="" alt="Bot Avatar" class="w-10 h-10 rounded-full flex-shrink-0">
-                    
-                    <div
+                    <!-- Chat avatar, filled in below from the bot's real identity -->
+                    <img id="botAvatar" src="" alt=""
+                        class="w-10 h-10 rounded-full flex-shrink-0 hidden">
+                    <div id="botAvatarFallback"
                         class="w-10 h-10 rounded-full bg-indigo-500 flex-shrink-0 flex items-center justify-center font-bold text-white">
-                        
+                        ?
                     </div>
-                    
 
                     <div class="flex-1 overflow-hidden">
                         <div class="flex items-center gap-2">
-                            <span class="font-semibold text-white">Bot</span>
+                            <span id="botName" class="font-semibold text-white">Bot</span>
                             <span class="bg-[#5865f2] text-[10px] text-white px-1 rounded font-medium"> Bot </span>
                         </div>
 
@@ -681,5 +679,28 @@ async function saveEmbed() {
     statusMsg.classList.remove('hidden');
 }
 
+// The preview is only convincing with the bot's own name and avatar. The host
+// bridge hands those over, so no plugin needs an endpoint of its own for it.
+(async function loadBotIdentity() {
+    let info;
+    try {
+        info = await doppler.bot();
+    } catch (e) {
+        return;   // leave the neutral placeholder in place
+    }
+
+    const name = info.global_name || info.username;
+    if (name) {
+        document.getElementById('botName').textContent = name;
+        document.getElementById('botAvatarFallback').textContent = name.charAt(0).toUpperCase();
+    }
+    if (info.avatar_url) {
+        const img = document.getElementById('botAvatar');
+        img.src = info.avatar_url;
+        img.alt = name || 'Bot';
+        img.classList.remove('hidden');
+        document.getElementById('botAvatarFallback').classList.add('hidden');
+    }
+})();
 </script>
 </body>

@@ -20,16 +20,16 @@ stop:
 
 update: ensure-env
 		docker compose stop
-		@git fetch origin main
+		@git fetch origin releases
 		@# --ff-only rather than a plain pull: a deployment clone has no local
 		@# commits to merge, so anything that cannot fast-forward means the
 		@# published history moved and needs a deliberate reset, not a merge.
 		@git merge --ff-only FETCH_HEAD || ( \
 			echo ""; \
-			echo "Cannot fast-forward: this clone has diverged from origin/main."; \
+			echo "Cannot fast-forward: this clone has diverged from origin/releases."; \
 			echo "Nothing here is meant to carry local commits, so the fix is:"; \
 			echo ""; \
-			echo "    git fetch origin && git reset --hard origin/main"; \
+			echo "    git fetch origin && git reset --hard origin/releases"; \
 			echo ""; \
 			echo "Your .env, savedata/, secrets/ and installed plugins are gitignored"; \
 			echo "and are not touched by that."; \

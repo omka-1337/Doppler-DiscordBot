@@ -1,9 +1,7 @@
 import asyncio
-import json
 import os
 import secrets
 import time
-import uuid
 import httpx
 import psutil
 from urllib.parse import urlencode
@@ -11,7 +9,7 @@ from urllib.parse import urlencode
 from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -43,15 +41,6 @@ if not SESSION_SECRET_KEY:
 
 app = FastAPI(title="Bot Dashboard")
 
-EMBEDS_DIR = BASE_DIR / "savedata" / "embeds"
-EMBEDS_DIR.mkdir(parents=True, exist_ok=True)
-
-EMBED_IMAGES_DIR = EMBEDS_DIR / "images"
-EMBED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-
-EMBED_IMAGE_MAX_BYTES = 8 * 1024 * 1024
-EMBED_IMAGE_ALLOWED_EXT = {".png", ".jpg", ".jpeg"}
-
 
 LOG_PATH = BASE_DIR / "latest.log"
 
@@ -60,7 +49,6 @@ LOG_PATH = BASE_DIR / "latest.log"
 psutil.cpu_percent()
 
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
-app.mount("/embed-images", StaticFiles(directory=EMBED_IMAGES_DIR), name="embed-images")
 
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
 
@@ -474,53 +462,6 @@ async def plugin_api_docs(request: Request):
             "setting_types": setting_types,
         },
     )
-
-# ---------------------------------------------------------------------
-
-class EmbedPayload(BaseModel):
-    filename: str
-    embed: dict
-
-# ---------------------------------------------------------------------
-
-@app.post("/api/save-embed")
-async def save_embed(payload: EmbedPayload):
-    if not payload.filename.strip():
-        raise HTTPException(status_code=400, detail="The file name cannot be empty")
-
-    clean_filename = "".join(c for c in payload.filename if c.isalnum() or c in ("-", "_")).lower()
-    file_path = EMBEDS_DIR / f"{clean_filename}.json"
-
-    try:
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(payload.embed, f, ensure_ascii=False, indent=2)
-        return {"status": "success", "message": f"The template has been saved as {clean_filename}.json"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ---------------------------------------------------------------------
-
-# UPLOAD IMAGE FOR EMBED
-# Stored under savedata/embeds/images/ and served locally for the dashboard preview.
-# The bot attaches the file directly when sending (see cogs/embed.py), so this works
-# even without a public URL for the dashboard.
-@app.post("/api/upload-embed-image")
-async def upload_embed_image(file: UploadFile = File(...)):
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in EMBED_IMAGE_ALLOWED_EXT:
-        raise HTTPException(status_code=400, detail="Only PNG/JPG images are allowed")
-
-    contents = await file.read()
-    if len(contents) > EMBED_IMAGE_MAX_BYTES:
-        raise HTTPException(status_code=400, detail="Image must be smaller than 8MB")
-
-    safe_name = f"{uuid.uuid4().hex}{ext}"
-    dest = EMBED_IMAGES_DIR / safe_name
-
-    with open(dest, "wb") as f:
-        f.write(contents)
-
-    return {"status": "ok", "filename": safe_name}
 
 # ---------------------------------------------------------------------
 

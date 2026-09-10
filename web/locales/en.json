@@ -5,7 +5,6 @@
     },
     "tabs": {
         "stats": "📊 Stats",
-        "embed_builder": "🛠️ Embed Builder",
         "music": "📻 Music",
         "plugins": "🧠 Plugins",
         "settings": "⚙️ Settings"
@@ -19,22 +18,6 @@
         "ram": "RAM (host)",
         "live_logs": "Live logs",
         "connecting": "Connecting..."
-    },
-    "embed_builder": {
-        "tab_title": "🛠️ Embed builder",
-        "name": "File name",
-        "cards": "Cards",
-        "add_card": "+ Add card",
-        "cards_hint": "Each card is its own independent block (own color, own text/images). All cards are sent as one Discord message.",
-        "cards_empty_hint": "Add a card to start building the message.",
-        "add_text": "📝 Add text",
-        "add_image": "🖼️ Add image",
-        "save": "💾 Save JSON",
-        "preview": {
-            "bot": "Bot",
-            "p_title": "Prewiev",
-            "empty": "Add a card to see a preview..."
-        }
     },
     "settings": {
         "title": "⚙️ Bot Settings",

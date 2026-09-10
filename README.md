@@ -11,7 +11,7 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 - 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Free and keyless by default, or switch it to the AI provider you already configured for better idiom and context.
 - 🔊 **Temporary Voice Channels** *(plugin)* — joining a configured "hub" channel automatically creates a private voice channel for the user, with buttons to rename it, set a user limit, change the bitrate, lock it and allow specific people in.
 - 🛡️ **Moderation** *(plugin)* — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
-- 🛠️ **Rich Embed Builder** *(plugin)* — build Discord messages visually in the dashboard using Components V2 (independent cards, each with its own accent color and ordered text/image blocks), then send them with `/embed <name>`. Images can be linked by URL or uploaded directly.
+- 🛠️ **Rich Embed Builder** *(plugin)* — build Discord messages visually using Components V2: independent cards with text, images, thumbnails and link buttons, then send them with `/embed <name>`. The builder is the plugin's own page, rendered by the dashboard in a sandboxed frame.
 - 🔒 **Server Protect** *(plugin)* — optional raid/alt mitigation. Checks every new member's account age on join (DMs the reason and kicks if too new; grants a role automatically otherwise), and detects join bursts — react with an admin-gated alert or fully automatic lockdown (revokes invites, rejects new joins for a while).
 - 🧠 **Plugins** — every feature above is one. Install from a source, then enable, configure and reload from the dashboard; reloading applies a plugin's new code *without restarting the bot*.
 - 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), a plugin browser for installing from a source, and generated settings forms for everything installed.
@@ -216,7 +216,7 @@ docker compose up -d --build
 | `DISCORD_CLIENT_SECRET` | Yes | From the Developer Portal application's OAuth2 page. Normally entered during first-run setup rather than by hand |
 | `SESSION_SECRET_KEY` | No | Generated and saved automatically on first run; don't set it yourself |
 
-Everything else — which plugins are installed and enabled, their settings, the AI provider and its key, music worker bot tokens — lives in the SQLite database (`savedata/bot.db`) and the broker's store, and is edited entirely through the web dashboard. Uploaded embed images are stored in `savedata/embeds/images/`.
+Everything else — which plugins are installed and enabled, their settings, the AI provider and its key, music worker bot tokens — lives in the SQLite database (`savedata/bot.db`) and the broker's store, and is edited entirely through the web dashboard. Embed templates and their uploaded images are stored in `savedata/embeds/`.
 
 ## Common commands
 

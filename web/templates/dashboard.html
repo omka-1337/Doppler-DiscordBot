@@ -39,10 +39,6 @@
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition bg-indigo-600 text-white">
                 {{ t.tabs.stats }}
             </button>
-            <button onclick="switchTab('embeds')" id="btn-embeds"
-                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
-                {{ t.tabs.embed_builder }}
-            </button>
             <button onclick="switchTab('music')" id="btn-music"
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
                 {{ t.tabs.music }}
@@ -152,97 +148,6 @@
                     class="bg-[#1e1f22] border border-[#3f4147] rounded p-3 h-96 overflow-y-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
                 </div>
             </div>
-        </div>
-
-        <!-- 1. TAB: EMBED BUILDER -->
-        <div id="tab-embeds" class="tab-content hidden space-y-4">
-
-            <!-- Sub-views: the builder, plus any page the embed plugin ships.
-                 Plugin pages that name this tab mount here rather than taking a
-                 top-level tab of their own. -->
-            <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg flex items-center justify-between">
-                <h2 class="text-xl font-bold text-white">{{ t.tabs.embed_builder }}</h2>
-                <div id="embedsSubTabs" class="flex gap-2 bg-[#1e1f22] p-1 rounded-md border border-[#3f4147]">
-                    <button type="button" onclick="switchEmbedView('builder')" id="embed-view-btn-builder"
-                        class="embed-view-btn px-3 py-1.5 rounded text-xs font-semibold transition bg-indigo-600 text-white">
-                        🛠️ Builder
-                    </button>
-                </div>
-            </div>
-
-        <div id="embed-view-builder" class="embed-view grid grid-cols-1 md:grid-cols-2 gap-8">
-
-            <!-- LEFT COLUMN: FORM -->
-            <div class="bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
-                <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                    {{ t.embed_builder.tab_title }}
-                </h2>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1"> {{ t.embed_builder.name }}
-                    </label>
-                    <input type="text" id="fileName" placeholder=" {{ t.embed_builder.name }} "
-                        class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white focus:outline-none focus:border-indigo-500 transition">
-                </div>
-
-                <hr class="border-[#3f4147]">
-
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <label class="block text-xs font-bold text-gray-400 uppercase"> {{ t.embed_builder.cards }}
-                        </label>
-                        <button type="button" onclick="addCard()"
-                            class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold">
-                            {{ t.embed_builder.add_card }}
-                        </button>
-                    </div>
-                    <p class="text-[11px] text-gray-500 mb-2">{{ t.embed_builder.cards_hint }}</p>
-                    <div id="cardsContainer" class="space-y-3"></div>
-                    <p id="cardsEmptyHint" class="text-[11px] text-gray-500 mt-2">
-                        {{ t.embed_builder.cards_empty_hint }}
-                    </p>
-                </div>
-
-                <button onclick="saveEmbed()"
-                    class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded transition shadow-md mt-2">
-                    {{ t.embed_builder.save }}
-                </button>
-                <p id="statusMsg" class="text-sm text-center font-semibold mt-2 hidden"></p>
-            </div>
-
-            <!-- RIGHT COLUMN: A DISCORD-STYLE PREVIEW -->
-            <div class="bg-[#313338] p-6 rounded-lg border border-[#2b2d31] shadow-lg h-fit">
-                <h2 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider"> {{
-                    t.embed_builder.preview.p_title }}
-                </h2>
-
-                <div class="flex gap-4">
-                    <!-- Chat avatar -->
-                    {% if bot.avatar_url %}
-                    <img src="{{ bot.avatar_url }}" alt="Bot Avatar" class="w-10 h-10 rounded-full flex-shrink-0">
-                    {% else %}
-                    <div
-                        class="w-10 h-10 rounded-full bg-indigo-500 flex-shrink-0 flex items-center justify-center font-bold text-white">
-                        {{ bot.username[0] }}
-                    </div>
-                    {% endif %}
-
-                    <div class="flex-1 overflow-hidden">
-                        <div class="flex items-center gap-2">
-                            <span class="font-semibold text-white">{{ bot.global_name }}</span>
-                            <span class="bg-[#5865f2] text-[10px] text-white px-1 rounded font-medium"> {{
-                                t.embed_builder.preview.bot }} </span>
-                        </div>
-
-                        <!-- LAYOUT PREVIEW: multiple independent cards, one Discord message -->
-                        <div id="previewCards" class="mt-2 max-w-md space-y-2">
-                            <p class="text-gray-500 text-sm italic">{{ t.embed_builder.preview.empty }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
         </div>
 
         <!-- 2. TAB: MUSIC -->

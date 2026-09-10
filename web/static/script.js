@@ -801,6 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadYouTubeOAuthStatus();
     initStats();
     connectLogsWebSocket();
+    loadPluginPages();
 
 });
 
@@ -880,6 +881,9 @@ function switchTab(tabName) {
 
     if (tabName === 'plugins') {
         loadPlugins();
+    }
+    if (tabName.startsWith('plugin-')) {
+        openPluginPage(tabName);
     }
 }
 
@@ -1723,3 +1727,149 @@ document.addEventListener('click', closeUserMenu);
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeUserMenu();
 });
+
+// ---------------------------------------------------------------------
+// PLUGIN PAGES
+//
+// A plugin's own page runs in an iframe with sandbox="allow-scripts" and,
+// deliberately, no allow-same-origin. The frame therefore gets an opaque
+// origin: it cannot read the dashboard's DOM, cannot send its cookies, and
+// cannot call the dashboard's API on the operator's behalf. Without that, a
+// plugin's page could simply POST to /api/plugins/sources/trust and mark its
+// own source trusted — defeating the one boundary that actually holds.
+//
+// Everything it needs goes through postMessage to the shim below, which only
+// ever forwards to that plugin's own endpoints.
+
+const pluginFrames = new Map();   // iframe element -> plugin id
+
+// Injected ahead of the plugin's own HTML.
+const PLUGIN_PAGE_SHIM = `<script>
+(function () {
+    let seq = 0;
+    const pending = new Map();
+
+    window.addEventListener('message', function (event) {
+        const msg = event.data;
+        if (!msg || msg.__doppler !== 'reply') return;
+        const entry = pending.get(msg.id);
+        if (!entry) return;
+        pending.delete(msg.id);
+        if (msg.error) entry.reject(new Error(msg.error));
+        else entry.resolve(msg.result);
+    });
+
+    window.doppler = {
+        // Call one of this plugin's own declared endpoints.
+        call: function (method, path, body) {
+            const id = ++seq;
+            return new Promise(function (resolve, reject) {
+                pending.set(id, { resolve: resolve, reject: reject });
+                parent.postMessage({ __doppler: 'call', id: id, method: method, path: path, body: body }, '*');
+            });
+        }
+    };
+})();
+<\/script>`;
+
+window.addEventListener('message', async event => {
+    const msg = event.data;
+    if (!msg || msg.__doppler !== 'call') return;
+
+    // A sandboxed frame's origin is the string "null", so it proves nothing.
+    // Identify the sender by its window instead: that cannot be forged.
+    let pluginId = null;
+    for (const [frame, id] of pluginFrames) {
+        if (frame.contentWindow === event.source) { pluginId = id; break; }
+    }
+    if (!pluginId) return;
+
+    const reply = (result, error) =>
+        event.source.postMessage({ __doppler: 'reply', id: msg.id, result, error }, '*');
+
+    const path = typeof msg.path === 'string' ? msg.path : '';
+    if (!path.startsWith('/') || path.includes('..')) {
+        reply(null, 'Invalid path');
+        return;
+    }
+
+    try {
+        // Confined to this plugin's own endpoints — the frame cannot name
+        // another plugin, let alone a dashboard route.
+        const res = await fetch(`/api/plugin/${pluginId}${path}`, {
+            method: (msg.method || 'GET').toUpperCase(),
+            headers: msg.body === undefined ? {} : { 'Content-Type': 'application/json' },
+            body: msg.body === undefined ? undefined : JSON.stringify(msg.body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) reply(null, data.detail || data.message || `HTTP ${res.status}`);
+        else reply(data);
+    } catch (e) {
+        reply(null, String(e));
+    }
+});
+
+async function loadPluginPages() {
+    let pages;
+    try {
+        const res = await fetch('/api/plugin-pages');
+        if (!res.ok) return;
+        pages = (await res.json()).pages || [];
+    } catch (e) {
+        return;
+    }
+
+    const settingsBtn = document.getElementById('btn-settings');
+    const navBar = settingsBtn ? settingsBtn.parentElement : null;
+    const main = document.querySelector('main');
+    if (!navBar || !main) return;
+
+    pages.forEach(page => {
+        const tabName = `plugin-${page.plugin}`;
+        if (document.getElementById(`tab-${tabName}`)) return;
+
+        const btn = document.createElement('button');
+        btn.id = `btn-${tabName}`;
+        btn.className = 'tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]';
+        btn.textContent = `${page.icon} ${page.title}`;
+        btn.addEventListener('click', () => switchTab(tabName));
+        navBar.insertBefore(btn, settingsBtn);
+
+        const pane = document.createElement('div');
+        pane.id = `tab-${tabName}`;
+        pane.className = 'tab-content hidden';
+        pane.dataset.plugin = page.plugin;
+        pane.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
+        main.appendChild(pane);
+    });
+}
+
+// Loaded on first open rather than up front: a page nobody visits should not
+// cost a request, and its scripts should not be running in the background.
+async function openPluginPage(tabName) {
+    const pane = document.getElementById(`tab-${tabName}`);
+    if (!pane || pane.dataset.loaded) return;
+
+    const pluginId = pane.dataset.plugin;
+    try {
+        const res = await fetch(`/api/plugin-page/${pluginId}`);
+        const data = await res.json();
+        if (!res.ok) {
+            pane.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not load the page.')}</p>`;
+            return;
+        }
+
+        const frame = document.createElement('iframe');
+        frame.className = 'w-full rounded-lg border border-[#3f4147] bg-[#2b2d31]';
+        frame.style.height = '78vh';
+        frame.setAttribute('sandbox', 'allow-scripts');
+        frame.srcdoc = PLUGIN_PAGE_SHIM + data.html;
+
+        pane.innerHTML = '';
+        pane.appendChild(frame);
+        pluginFrames.set(frame, pluginId);
+        pane.dataset.loaded = '1';
+    } catch (e) {
+        pane.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
+    }
+}

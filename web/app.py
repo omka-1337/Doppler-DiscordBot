@@ -750,6 +750,32 @@ async def install_plugin(payload: InstallPayload):
 async def uninstall_plugin(payload: PluginActionPayload):
     return JSONResponse(await _call_bot("POST", "/internal/plugins/uninstall", {"plugin": payload.plugin}))
 
+@app.get("/api/plugin-pages")
+async def list_plugin_pages():
+    return JSONResponse(await _call_bot("GET", "/internal/plugin-pages"))
+
+
+@app.get("/api/plugin-page/{plugin_id}")
+async def get_plugin_page(plugin_id: str):
+    """The plugin's own HTML, returned as text for the dashboard to sandbox.
+
+    Deliberately not served as text/html at its own URL: that would give it the
+    dashboard's origin, which is exactly what the sandbox exists to prevent.
+    """
+    url = f"{BOT_INTERNAL_API}/internal/plugin-page/{plugin_id}"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=15.0)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Bot is not reachable: {e}") from e
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code,
+                            detail=response.json().get("message", "Page unavailable"))
+
+    return JSONResponse({"status": "ok", "html": response.text})
+
+
 @app.get("/api/plugin-endpoints")
 async def list_plugin_endpoints():
     """What the installed plugins expose, so a plugin's own page can find it."""

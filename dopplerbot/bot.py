@@ -12,6 +12,7 @@ from dopplerbot import __version__
 from dopplerbot.database import init_db, get_settings, set_settings, close_db
 from dopplerbot.plugins import PluginRegistry
 from dopplerbot.plugins import endpoints as plugin_endpoints
+from dopplerbot.plugins import trust as plugin_trust
 
 load_dotenv()
 
@@ -433,6 +434,47 @@ async def handle_uninstall_plugin(request):
 
 # ---------------------------------------------------------------------
 
+# PLUGIN-SUPPLIED PAGES
+# A page is served as plain text and rendered by the dashboard inside a
+# sandboxed frame. Trusted sources only, for the same reason endpoints are:
+# the page is the plugin's own code running in the operator's browser, and the
+# sandbox is a second line of defence rather than the only one.
+async def handle_list_plugin_pages(request):
+    pages = []
+    for plugin_id, entry in bot.plugins.loaded.items():
+        page = entry.manifest.page
+        if page and plugin_trust.is_trusted(plugin_id):
+            pages.append({
+                "plugin": plugin_id,
+                "title": page.title,
+                "icon": page.icon,
+                "plugin_name": entry.manifest.name,
+            })
+    return web.json_response({"status": "ok", "pages": pages})
+
+
+async def handle_plugin_page(request):
+    plugin_id = request.match_info["plugin_id"]
+    entry = bot.plugins.loaded.get(plugin_id)
+
+    if entry is None or not entry.manifest.page:
+        return web.json_response({"status": "error", "message": "No such page"}, status=404)
+
+    if not plugin_trust.is_trusted(plugin_id):
+        return web.json_response(
+            {"status": "error", "message": f"{plugin_id!r} came from an untrusted source."}, status=403
+        )
+
+    path = (entry.manifest.path / entry.manifest.page.entry).resolve()
+    # The manifest parser rejects escaping paths, but a symlink placed inside
+    # the plugin folder could still point outside it.
+    if not path.is_relative_to(entry.manifest.path.resolve()) or not path.is_file():
+        return web.json_response({"status": "error", "message": "Page file is missing"}, status=404)
+
+    return web.Response(text=path.read_text(encoding="utf-8"), content_type="text/plain")
+
+# ---------------------------------------------------------------------
+
 # PLUGIN-DECLARED ENDPOINTS
 # Registered in a lookup table rather than the router: aiohttp freezes its
 # router once the app is running, and plugins come and go long after that.
@@ -490,6 +532,8 @@ async def start_internal_api():
     app.router.add_post("/internal/plugins/install", handle_install_plugin)
     app.router.add_post("/internal/plugins/uninstall", handle_uninstall_plugin)
     app.router.add_get("/internal/plugin-endpoints", handle_list_plugin_endpoints)
+    app.router.add_get("/internal/plugin-pages", handle_list_plugin_pages)
+    app.router.add_get("/internal/plugin-page/{plugin_id}", handle_plugin_page)
     app.router.add_route("*", "/internal/plugin/{plugin_id}/{tail:.*}", handle_plugin_endpoint)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
     # stats tab) — per-request access logs here are just noise in latest.log.

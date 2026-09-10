@@ -30,6 +30,23 @@ class PluginManifestError(Exception):
 
 
 @dataclass(frozen=True)
+class PagePlugin:
+    """A settings page a plugin ships itself.
+
+    For the cases a generated form cannot express -- the embed builder, whose
+    UI is a canvas rather than a list of fields. The file is served into a
+    sandboxed frame; see the dashboard side for what that frame may do.
+    """
+
+    title: str
+    entry: str
+    icon: str = "🧩"
+
+    def to_dict(self) -> dict:
+        return {"title": self.title, "entry": self.entry, "icon": self.icon}
+
+
+@dataclass(frozen=True)
 class ServiceSpec:
     """A sidecar container a plugin needs (Lavalink, a database, ...).
 
@@ -82,6 +99,8 @@ class PluginManifest:
     requirements: list[str] = field(default_factory=list)
     # Sidecar containers this plugin needs; see ServiceSpec.
     services: list[ServiceSpec] = field(default_factory=list)
+    # An optional settings page of the plugin's own; see PagePlugin.
+    page: "PagePlugin | None" = None
     # Whether the plugin starts enabled the first time it is discovered.
     default_enabled: bool = True
     # Filesystem location. Empty for manifests fetched from a remote catalog.
@@ -105,6 +124,7 @@ class PluginManifest:
             "homepage": self.homepage,
             "requirements": list(self.requirements),
             "services": [service.to_dict() for service in self.services],
+            "page": self.page.to_dict() if self.page else None,
             "default_enabled": self.default_enabled,
         }
 
@@ -221,6 +241,36 @@ def _parse_services(data: dict, plugin_id: str) -> list[ServiceSpec]:
     return services
 
 
+def _parse_page(data: dict, plugin_id: str, path: Path | None) -> "PagePlugin | None":
+    raw = data.get("page")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise PluginManifestError(f"{plugin_id!r}: 'page' must be an object.")
+
+    entry = str(raw.get("entry", "")).strip()
+    if not entry:
+        raise PluginManifestError(f"{plugin_id!r}: 'page' declares no entry file.")
+
+    # Same rule as service file mounts: the page must come from inside the
+    # plugin's own folder.
+    if entry.startswith("/") or ".." in Path(entry).parts:
+        raise PluginManifestError(
+            f"{plugin_id!r}: page entry {entry!r} must be a relative path inside the plugin directory."
+        )
+    if not entry.endswith(".html"):
+        raise PluginManifestError(f"{plugin_id!r}: page entry {entry!r} must be an .html file.")
+
+    if path is not None and not (path / entry).is_file():
+        raise PluginManifestError(f"{plugin_id!r}: page entry {entry!r} does not exist.")
+
+    title = str(raw.get("title", "")).strip()
+    if not title:
+        raise PluginManifestError(f"{plugin_id!r}: 'page' declares no title.")
+
+    return PagePlugin(title=title, entry=entry, icon=str(raw.get("icon", "🧩")))
+
+
 def parse_manifest(data: dict, path: Path | None = None) -> PluginManifest:
     """Validate a decoded plugin.json. Raises PluginManifestError."""
     if not isinstance(data, dict):
@@ -267,6 +317,7 @@ def parse_manifest(data: dict, path: Path | None = None) -> PluginManifest:
         homepage=str(data.get("homepage", "")),
         requirements=requirements,
         services=_parse_services(data, plugin_id),
+        page=_parse_page(data, plugin_id, path),
         default_enabled=bool(data.get("default_enabled", True)),
         path=path,
     )

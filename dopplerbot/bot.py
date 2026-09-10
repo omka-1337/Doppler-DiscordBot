@@ -247,8 +247,10 @@ async def handle_stats(request):
         "guild_count": len(bot.guilds),
         "plugins_running": len(bot.plugins.loaded),
         "plugins_total": len(bot.plugins.manifests),
-        # Before the gateway connects this is inf, not nan, which the previous
-        # isnan() guard let through and round() then refused.
+        # discord.py has two sentinels here: nan while there is no websocket at
+        # all, and inf once there is one but its heartbeat has not started --
+        # which is every reconnect, not just startup. The old isnan() guard
+        # caught the first and let the second through for round() to refuse.
         "latency_ms": round(bot.latency * 1000) if math.isfinite(bot.latency) else None,
         "connected": not bot.is_closed(),
     })

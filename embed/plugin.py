@@ -1,4 +1,7 @@
+import base64
 import json
+import uuid
+from pathlib import Path
 
 import discord
 from discord import app_commands
@@ -9,6 +12,9 @@ from dopplerbot.plugins.api import Plugin
 
 # Discord's own limit for one action row.
 MAX_BUTTONS_PER_ROW = 5
+
+IMAGE_MAX_BYTES = 8 * 1024 * 1024
+IMAGE_ALLOWED_EXT = {".png", ".jpg", ".jpeg"}
 
 
 class EmbedCog(commands.Cog):
@@ -148,6 +154,8 @@ class EmbedPlugin(Plugin):
         try:
             self.ctx.add_endpoint("GET", "/templates", self.list_templates)
             self.ctx.add_endpoint("POST", "/delete", self.delete_template)
+            self.ctx.add_endpoint("POST", "/save", self.save_template)
+            self.ctx.add_endpoint("POST", "/upload", self.upload_image)
         except PermissionError as e:
             # Untrusted plugins may not declare endpoints. The commands still
             # work; only the builder's own page would be unavailable.
@@ -167,6 +175,55 @@ class EmbedPlugin(Plugin):
                 data = {}
             out.append({"name": name, "data": data})
         return {"templates": out}
+
+    async def save_template(self, request):
+        body = await request.json()
+        raw_name = str(body.get("filename", ""))
+
+        # The name becomes a path, so it is reduced to characters that cannot
+        # traverse or escape the templates directory.
+        name = "".join(c for c in raw_name if c.isalnum() or c in ("-", "_")).lower()
+        if not name:
+            return {"status": "error", "message": "The file name cannot be empty."}
+
+        embed = body.get("embed")
+        if not isinstance(embed, dict) or not embed.get("cards"):
+            return {"status": "error", "message": "Nothing to save."}
+
+        self.cog.embeds_dir.mkdir(parents=True, exist_ok=True)
+        (self.cog.embeds_dir / f"{name}.json").write_text(
+            json.dumps(embed, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        self.log.info("Saved embed template %r", name)
+        return {"status": "ok", "message": f"Saved as {name}.json"}
+
+    async def upload_image(self, request):
+        body = await request.json()
+
+        ext = Path(str(body.get("name", ""))).suffix.lower()
+        if ext not in IMAGE_ALLOWED_EXT:
+            return {"status": "error", "message": "Only PNG/JPG images are allowed."}
+
+        # The page sends a data: URL, since a sandboxed frame cannot post a
+        # multipart form through the message bridge.
+        raw = str(body.get("data", ""))
+        if "," in raw:
+            raw = raw.split(",", 1)[1]
+
+        try:
+            content = base64.b64decode(raw, validate=True)
+        except Exception:
+            return {"status": "error", "message": "Image data is not valid base64."}
+
+        if not content:
+            return {"status": "error", "message": "Image is empty."}
+        if len(content) > IMAGE_MAX_BYTES:
+            return {"status": "error", "message": "Image must be smaller than 8MB."}
+
+        safe_name = f"{uuid.uuid4().hex}{ext}"
+        self.cog.images_dir.mkdir(parents=True, exist_ok=True)
+        (self.cog.images_dir / safe_name).write_bytes(content)
+        return {"status": "ok", "filename": safe_name}
 
     async def delete_template(self, request):
         body = await request.json()

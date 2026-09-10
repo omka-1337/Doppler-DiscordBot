@@ -691,6 +691,12 @@ async def install_plugin(payload: InstallPayload):
 async def uninstall_plugin(payload: PluginActionPayload):
     return JSONResponse(await _call_bot("POST", "/internal/plugins/uninstall", {"plugin": payload.plugin}))
 
+@app.get("/api/bot-info")
+async def bot_info():
+    """The bot's name and avatar, for plugin pages to render alongside a preview."""
+    return JSONResponse(await get_bot_info())
+
+
 @app.get("/api/plugin-pages")
 async def list_plugin_pages():
     return JSONResponse(await _call_bot("GET", "/internal/plugin-pages"))

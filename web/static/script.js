@@ -280,7 +280,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initStats();
     connectLogsWebSocket();
     loadPluginPages();
-
 });
 
 async function saveSystemSettings(event) {
@@ -764,6 +763,7 @@ async function togglePlugin(pluginId, enabled) {
         alert('Error connecting to the server.');
     }
     loadPlugins();
+    loadPluginPages();
 }
 
 async function reloadPlugin(pluginId) {
@@ -779,6 +779,7 @@ async function reloadPlugin(pluginId) {
         alert('Error connecting to the server.');
     }
     loadPlugins();
+    loadPluginPages();
 }
 
 async function savePluginSettings(pluginId) {
@@ -926,6 +927,7 @@ async function installPlugin(source, pluginId) {
         alert('Error connecting to the server.');
     }
     loadCatalog();
+    loadPluginPages();
 }
 
 async function uninstallPlugin(pluginId) {
@@ -949,6 +951,7 @@ async function uninstallPlugin(pluginId) {
     } else {
         loadPlugins();
     }
+    loadPluginPages();
 }
 
 function renderSourceRow(source, installedCount) {
@@ -1237,14 +1240,24 @@ const PLUGIN_PAGE_SHIM = `<script>
         else entry.resolve(msg.result);
     });
 
+    function request(payload) {
+        const id = ++seq;
+        payload.id = id;
+        return new Promise(function (resolve, reject) {
+            pending.set(id, { resolve: resolve, reject: reject });
+            parent.postMessage(payload, '*');
+        });
+    }
+
     window.doppler = {
         // Call one of this plugin's own declared endpoints.
         call: function (method, path, body) {
-            const id = ++seq;
-            return new Promise(function (resolve, reject) {
-                pending.set(id, { resolve: resolve, reject: reject });
-                parent.postMessage({ __doppler: 'call', id: id, method: method, path: path, body: body }, '*');
-            });
+            return request({ __doppler: 'call', method: method, path: path, body: body });
+        },
+        // The bot's name and avatar. Read-only, and the same for every page, so
+        // it comes from the host rather than each plugin serving its own copy.
+        bot: function () {
+            return request({ __doppler: 'bot' });
         }
     };
 })();
@@ -1252,7 +1265,7 @@ const PLUGIN_PAGE_SHIM = `<script>
 
 window.addEventListener('message', async event => {
     const msg = event.data;
-    if (!msg || msg.__doppler !== 'call') return;
+    if (!msg || (msg.__doppler !== 'call' && msg.__doppler !== 'bot')) return;
 
     // A sandboxed frame's origin is the string "null", so it proves nothing.
     // Identify the sender by its window instead: that cannot be forged.
@@ -1264,6 +1277,16 @@ window.addEventListener('message', async event => {
 
     const reply = (result, error) =>
         event.source.postMessage({ __doppler: 'reply', id: msg.id, result, error }, '*');
+
+    if (msg.__doppler === 'bot') {
+        try {
+            const res = await fetch('/api/bot-info');
+            reply(await res.json());
+        } catch (e) {
+            reply(null, String(e));
+        }
+        return;
+    }
 
     const path = typeof msg.path === 'string' ? msg.path : '';
     if (!path.startsWith('/') || path.includes('..')) {
@@ -1297,39 +1320,24 @@ async function loadPluginPages() {
         return;
     }
 
-    pages.forEach(page => (page.tab ? mountPageInTab(page) : mountPageAsTab(page)));
+    // Disabling or uninstalling a plugin has to take its tab with it, or the
+    // dashboard keeps offering a page that no longer answers.
+    const live = new Set(pages.map(p => p.plugin));
+    let closedActive = false;
+
+    document.querySelectorAll('[data-plugin-page]').forEach(el => {
+        if (live.has(el.dataset.pluginPage)) return;
+        if (el.classList.contains('tab-content') && !el.classList.contains('hidden')) closedActive = true;
+        if (el.dataset.frame) pluginFrames.delete(el.querySelector('iframe'));
+        el.remove();
+    });
+
+    pages.forEach(mountPageAsTab);
+
+    if (closedActive) switchTab('stats');
 }
 
-// A page that names an existing tab becomes a sub-view of it, beside whatever
-// the dashboard already shows there.
-function mountPageInTab(page) {
-    const host = document.getElementById(`tab-${page.tab}`);
-    const bar = document.getElementById(`${page.tab}SubTabs`);
-    if (!host || !bar) {
-        mountPageAsTab(page);   // the tab it asked for does not exist
-        return;
-    }
-
-    const view = `plugin-${page.plugin}`;
-    if (document.getElementById(`embed-view-${view}`)) return;
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = `embed-view-btn-${view}`;
-    btn.className = 'embed-view-btn px-3 py-1.5 rounded text-xs font-semibold transition text-gray-400 hover:bg-[#35373c]';
-    btn.textContent = `${page.icon} ${page.title}`;
-    btn.addEventListener('click', () => switchEmbedView(view));
-    bar.appendChild(btn);
-
-    const pane = document.createElement('div');
-    pane.id = `embed-view-${view}`;
-    pane.className = 'embed-view hidden';
-    pane.dataset.plugin = page.plugin;
-    pane.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
-    host.appendChild(pane);
-}
-
-// Otherwise the page gets a top-level tab to itself.
+// Each page gets a top-level tab of its own.
 function mountPageAsTab(page) {
     const settingsBtn = document.getElementById('btn-settings');
     const navBar = settingsBtn ? settingsBtn.parentElement : null;
@@ -1343,6 +1351,7 @@ function mountPageAsTab(page) {
     btn.id = `btn-${tabName}`;
     btn.className = 'tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]';
     btn.textContent = `${page.icon} ${page.title}`;
+    btn.dataset.pluginPage = page.plugin;
     btn.addEventListener('click', () => switchTab(tabName));
     navBar.insertBefore(btn, settingsBtn);
 
@@ -1350,6 +1359,7 @@ function mountPageAsTab(page) {
     pane.id = `tab-${tabName}`;
     pane.className = 'tab-content hidden';
     pane.dataset.plugin = page.plugin;
+    pane.dataset.pluginPage = page.plugin;
     pane.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
     main.appendChild(pane);
 }
@@ -1379,6 +1389,7 @@ async function openPluginPage(pane) {
         pane.appendChild(frame);
         pluginFrames.set(frame, pluginId);
         pane.dataset.loaded = '1';
+        pane.dataset.frame = '1';
     } catch (e) {
         pane.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
     }

@@ -170,6 +170,34 @@ app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="
 
 # ---------------------------------------------------------------------
 
+async def get_user_avatar(user_id: str) -> str | None:
+    """The logged-in account's avatar, looked up with the bot token.
+
+    Resolved per render rather than stored in the session, so a session made
+    before avatars were shown still gets one, and a changed avatar shows up.
+    """
+    token = os.getenv("DISCORD_BOT_TOKEN", "")
+    if not token or not user_id:
+        return None
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{DISCORD_API_BASE}/users/{user_id}",
+                headers={"Authorization": f"Bot {token}"},
+                timeout=10.0,
+            )
+        if response.status_code != 200:
+            return None
+        data = response.json()
+    except Exception as e:
+        print(f"Could not fetch the dashboard user's avatar: {e}")
+        return None
+
+    avatar_hash = data.get("avatar")
+    return f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png" if avatar_hash else None
+
+
 async def get_bot_info() -> dict:
     # Read at call time, not from the import-time constant: on a fresh install
     # this process starts with no token, and the one entered during setup would
@@ -226,7 +254,7 @@ async def get_dashboard(request: Request):
             "discord_token": os.getenv("DISCORD_BOT_TOKEN", ""),
             "discord_client_secret": os.getenv("DISCORD_CLIENT_SECRET", ""),
             "logged_in_username": request.session.get("username", ""),
-            "logged_in_avatar": request.session.get("avatar_url"),
+            "logged_in_avatar": await get_user_avatar(request.session.get("user_id", "")),
         }
     )
 
@@ -983,14 +1011,9 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     if not authorized:
         return deny(f"{user.get('username', 'That account')} isn't the server owner or an administrator.")
 
-    avatar_hash = user.get("avatar")
     request.session["authorized"] = True
     request.session["user_id"] = user_id
     request.session["username"] = user.get("global_name") or user.get("username", "")
-    request.session["avatar_url"] = (
-        f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
-        if avatar_hash else None
-    )
 
     return RedirectResponse("/")
 

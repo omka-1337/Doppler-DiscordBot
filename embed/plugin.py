@@ -147,10 +147,36 @@ class EmbedPlugin(Plugin):
         # settings schema -- it gets what it needs from this plugin instead.
         try:
             self.ctx.add_endpoint("GET", "/templates", self.list_templates)
+            self.ctx.add_endpoint("POST", "/delete", self.delete_template)
         except PermissionError as e:
             # Untrusted plugins may not declare endpoints. The commands still
             # work; only the builder's own page would be unavailable.
             self.log.warning("%s", e)
 
     async def list_templates(self, request):
-        return {"templates": self.cog._list_template_names()}
+        names = self.cog._list_template_names()
+        if request.query.get("full") != "1":
+            return {"templates": names}
+
+        # The page summarises each template, so it needs the contents too.
+        out = []
+        for name in names:
+            try:
+                data = json.loads((self.cog.embeds_dir / f"{name}.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            out.append({"name": name, "data": data})
+        return {"templates": out}
+
+    async def delete_template(self, request):
+        body = await request.json()
+        name = str(body.get("name", ""))
+
+        # The name comes from the page, so it is treated as untrusted: only a
+        # template that is actually in the list may be removed.
+        if name not in self.cog._list_template_names():
+            return {"status": "error", "message": "No such template."}
+
+        (self.cog.embeds_dir / f"{name}.json").unlink(missing_ok=True)
+        self.log.info("Deleted embed template %r", name)
+        return {"status": "ok"}

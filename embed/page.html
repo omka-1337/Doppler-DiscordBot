@@ -1,0 +1,84 @@
+<!-- Served into a sandboxed frame by the dashboard. No same-origin access, so
+     everything goes through window.doppler.call(), which the host confines to
+     this plugin's own endpoints. -->
+<meta charset="utf-8">
+<script src="https://cdn.tailwindcss.com"></script>
+
+<body class="bg-[#2b2d31] text-gray-200 font-sans p-5">
+
+  <div class="max-w-3xl mx-auto space-y-4">
+    <div>
+      <h1 class="text-lg font-bold text-white">Saved templates</h1>
+      <p class="text-xs text-gray-400 mt-1">
+        Everything <code class="bg-[#1e1f22] px-1 rounded">/embed &lt;name&gt;</code> can send.
+      </p>
+    </div>
+
+    <div id="list" class="space-y-2">
+      <p class="text-xs text-gray-400">Loading...</p>
+    </div>
+  </div>
+
+  <script>
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    // Counts what a template is made of, so the list says something useful
+    // without opening each one.
+    function describe(t) {
+      const counts = {};
+      (t.cards || []).forEach(card =>
+        (card.blocks || []).forEach(b => { counts[b.type] = (counts[b.type] || 0) + 1; }));
+      const parts = Object.entries(counts).map(([k, n]) => `${n} ${k}`);
+      const cards = (t.cards || []).length;
+      return `${cards} card${cards === 1 ? '' : 's'}` + (parts.length ? ' · ' + parts.join(', ') : '');
+    }
+
+    function render(templates) {
+      const list = document.getElementById('list');
+      if (!templates.length) {
+        list.innerHTML = '<p class="text-xs text-gray-400">Nothing saved yet. Build one in the Embed Builder tab.</p>';
+        return;
+      }
+      list.innerHTML = templates.map(t => `
+        <div class="bg-[#1e1f22] border border-[#3f4147] rounded-lg p-3 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-white truncate">${esc(t.name)}</p>
+            <p class="text-[11px] text-gray-500 font-mono">${esc(t.summary)}</p>
+          </div>
+          <button data-name="${esc(t.name)}"
+            class="del bg-[#2b2d31] hover:bg-red-600/80 border border-[#3f4147] text-gray-300 hover:text-white text-xs font-semibold px-3 py-1.5 rounded transition shrink-0">
+            Delete
+          </button>
+        </div>`).join('');
+
+      list.querySelectorAll('.del').forEach(btn =>
+        btn.addEventListener('click', () => remove(btn.dataset.name)));
+    }
+
+    async function load() {
+      try {
+        const data = await doppler.call('GET', '/templates?full=1');
+        render((data.templates || []).map(t => ({
+          name: typeof t === 'string' ? t : t.name,
+          summary: typeof t === 'string' ? '' : describe(t.data || {}),
+        })));
+      } catch (e) {
+        document.getElementById('list').innerHTML =
+          `<p class="text-xs text-red-400">${esc(e.message)}</p>`;
+      }
+    }
+
+    async function remove(name) {
+      if (!confirm(`Delete the "${name}" template?`)) return;
+      try {
+        await doppler.call('POST', '/delete', { name });
+      } catch (e) {
+        alert(e.message);
+      }
+      load();
+    }
+
+    load();
+  </script>
+</body>

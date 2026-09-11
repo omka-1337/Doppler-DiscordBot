@@ -3,6 +3,30 @@ import wavelink
 import discord
 import asyncio
 
+
+# Lavalink's exception message is a wall of Java stack traces wrapped around one
+# or two sentences that actually say something. This digs those out.
+def _useful_line(reason: str | None) -> str:
+    if not reason:
+        return ""
+
+    lines = [
+        line.strip() for line in reason.splitlines()
+        if line.strip() and not line.strip().startswith("at ")
+    ]
+
+    # "Client [ANDROID_VR] failed: This video requires login." -- the half after
+    # the colon is the part worth showing.
+    for line in lines:
+        if "failed:" in line:
+            detail = line.split("failed:", 1)[1].strip()
+            if detail:
+                return detail[:297] + "..." if len(detail) > 300 else detail
+
+    detail = lines[0] if lines else ""
+    return detail[:297] + "..." if len(detail) > 300 else detail
+
+
 class MusicPlayer(wavelink.Player):
 
     """
@@ -117,9 +141,7 @@ class MusicPlayer(wavelink.Player):
         if self.text_channel is None:
             return
 
-        detail = (reason or "").strip().splitlines()[0] if reason else ""
-        if len(detail) > 300:
-            detail = detail[:297] + "..."
+        detail = _useful_line(reason)
 
         text = f"⚠️ Could not play **{discord.utils.escape_markdown(title)}**"
         if detail:

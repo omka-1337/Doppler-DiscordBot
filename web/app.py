@@ -437,7 +437,12 @@ DOCS_SOURCE = BASE_DIR / "documentation.md"
 
 @app.get("/docs/plugins", response_class=HTMLResponse)
 async def plugin_api_docs(request: Request):
-    md = markdown.Markdown(extensions=["tables", "fenced_code", "toc", "sane_lists"])
+    # toc_depth 2-2 keeps the sidebar to the section headings. Without it every
+    # entry nests under the document's single h1, which is not a useful menu.
+    md = markdown.Markdown(
+        extensions=["tables", "fenced_code", "toc", "sane_lists"],
+        extension_configs={"toc": {"toc_depth": "2-2"}},
+    )
     try:
         body = md.convert(DOCS_SOURCE.read_text(encoding="utf-8"))
     except OSError:

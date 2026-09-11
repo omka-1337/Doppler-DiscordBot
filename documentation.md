@@ -1,8 +1,8 @@
 # Doppler Plugin API
 
-Reference for writing a Doppler plugin. This is the GitHub rendering of the
-reference the dashboard serves at `/docs/plugins`; the dashboard copy fills in
-the API version your own install implements.
+Reference for writing a Doppler plugin. This file is the reference itself: a
+running dashboard renders it at `/docs/plugins`, with the API version that
+install actually implements shown in the header.
 
 **Plugin API 2.0**
 

@@ -250,14 +250,6 @@ class PluginRegistry:
         if entry is None:
             return False
 
-        if stop_services and entry.manifest.services:
-            try:
-                stopped = await entry.context.services.stop()
-                if stopped:
-                    log.info("Stopped sidecar service(s) for %r: %s", plugin_id, ", ".join(stopped))
-            except ServiceUnavailable as e:
-                log.warning("Could not stop %r's services: %s", plugin_id, e)
-
         try:
             await entry.instance.teardown()
         except Exception:
@@ -266,6 +258,19 @@ class PluginRegistry:
         # Runs even if teardown() raised, so a buggy plugin can't leave its
         # cogs and views wired into the bot.
         await entry.context._unregister()
+
+        # Sidecars go last, once the plugin has had its say. Pulling a service
+        # out from under still-running code means the client that was talking
+        # to it sees an unexpected drop -- and a library that reconnects on its
+        # own will then retry a host that no longer resolves, forever.
+        if stop_services and entry.manifest.services:
+            try:
+                stopped = await entry.context.services.stop()
+                if stopped:
+                    log.info("Stopped sidecar service(s) for %r: %s", plugin_id, ", ".join(stopped))
+            except ServiceUnavailable as e:
+                log.warning("Could not stop %r's services: %s", plugin_id, e)
+
         _purge_modules(entry.manifest.module_name)
 
         log.info("Unloaded plugin: %s", entry.manifest.name)

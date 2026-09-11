@@ -33,6 +33,10 @@ much less often than the bot around it.
 
 ### Fixed
 
+- Disabling a plugin with a sidecar left its client reconnecting forever. The
+  container was stopped before the plugin's teardown ran, so the library saw an
+  unexpected drop and retried a host that no longer resolved. Sidecars now stop
+  after the plugin has unwound.
 - Channel, category and role ids reached the dashboard as JSON numbers, which a
   browser rounds: an id ending 763230 arrived as 763200. The panel showed the
   wrong id, and saving the form wrote the rounded value back. They are sent as

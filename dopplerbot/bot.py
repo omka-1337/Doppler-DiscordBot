@@ -305,7 +305,7 @@ async def handle_toggle_plugin(request):
         return web.json_response({"status": "error", "message": "Unknown plugin"}, status=404)
 
     ok = await bot.plugins.set_enabled(plugin_id, enabled)
-    await sync_commands()
+    schedule_sync()
 
     if not ok:
         return web.json_response(
@@ -323,7 +323,7 @@ async def handle_reload_plugin(request):
         return web.json_response({"status": "error", "message": "Unknown plugin"}, status=404)
 
     ok = await bot.plugins.reload(plugin_id)
-    await sync_commands()
+    schedule_sync()
 
     if not ok:
         return web.json_response(
@@ -411,12 +411,12 @@ async def handle_install_plugin(request):
         # early because it is already loaded, leaving the previous version in
         # memory with the new files sitting unused on disk.
         await bot.plugins.reload(plugin_id)
-        await sync_commands()
+        schedule_sync()
     elif await bot.plugins.is_enabled(plugin_id):
         # Installing something and then having to switch it on separately is a
         # pointless extra step when the plugin says it wants to be on.
         await bot.plugins.load(plugin_id)
-        await sync_commands()
+        schedule_sync()
 
     return web.json_response({
         "status": "ok",
@@ -434,7 +434,7 @@ async def handle_uninstall_plugin(request):
 
     response = await _call_broker("POST", "/plugins/uninstall", data)
     bot.plugins.discover()
-    await sync_commands()
+    schedule_sync()
     return response
 
 # ---------------------------------------------------------------------
@@ -653,6 +653,42 @@ async def sync_commands() -> int:
     synced = await bot.tree.sync(guild=guild)
     logging.info(f"Synced {len(synced)} slash command(s) to guild: {guild.name} ({guild.id})")
     return len(synced)
+
+# ---------------------------------------------------------------------
+
+# Discord rate limits guild command syncs, and discord.py waits the limit out
+# silently -- which can be a full minute. The dashboard's HTTP request must not
+# be held open for that: it times out at 15s and reports the bot as unreachable,
+# even though the plugin change already applied. So request handlers schedule
+# the sync instead of awaiting it.
+_sync_task: asyncio.Task | None = None
+_sync_again = False
+
+
+async def _sync_worker():
+    global _sync_task, _sync_again
+    try:
+        while True:
+            # A change landing while this is rate-limited would otherwise be left
+            # out, because the payload is built before the wait.
+            _sync_again = False
+            await sync_commands()
+            if not _sync_again:
+                break
+    except Exception:
+        logging.exception("Slash command sync failed.")
+    finally:
+        _sync_task = None
+
+
+def schedule_sync() -> None:
+    """Sync slash commands in the background, one run at a time."""
+    global _sync_task, _sync_again
+    if _sync_task is not None:
+        _sync_again = True
+        return
+    _sync_task = asyncio.create_task(_sync_worker())
+
 
 # ---------------------------------------------------------------------
 

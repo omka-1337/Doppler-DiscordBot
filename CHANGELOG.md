@@ -4,6 +4,20 @@ Doppler's own version. The plugin API is versioned separately — a plugin
 declares the API it targets in its `plugin.json`, and that contract changes
 much less often than the bot around it.
 
+## Unreleased
+
+### Fixed
+
+- The dashboard's live log stream. `websockets` reached the image only as a
+  dependency of the AI SDK; when that moved to the broker, uvicorn silently lost
+  WebSocket support. It is declared explicitly now.
+- Enabling or disabling a plugin no longer reports "Bot is not reachable".
+  Discord rate limits guild command syncs and discord.py waits the limit out, so
+  the request could outlast the dashboard's timeout even though the change had
+  already applied. The sync now runs in the background.
+- The plugin API sidebar lists the reference's sections again, instead of the
+  document title alone.
+
 ## 0.3.0 — 2026-09-11
 
 Plugin API 2.0. **Every plugin must declare `"api_version": "2.0"`** — a plugin

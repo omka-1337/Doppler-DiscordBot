@@ -1,8 +1,8 @@
 {
   "id": "ai",
   "name": "AI Chat",
-  "version": "2.0.0",
-  "api_version": "1.0",
+  "version": "2.0.1",
+  "api_version": "2.0",
   "description": "Conversational AI: mention the bot and it replies. The provider and API key are the bot's own settings.",
   "author": "Doppler",
   "icon": "🤖",

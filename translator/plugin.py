@@ -4,8 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType, TranslationError
+from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
 
+from .backend import MODE_AI, MODE_FREE, TranslationError, translate
 from .locale_mapping import display_name, display_name_from_provider_code, get_base_lang
 
 logger = logging.getLogger(__name__)
@@ -44,11 +45,12 @@ class TranslatorCog(commands.Cog):
         target_base_lang = get_base_lang(interaction.locale)
 
         try:
-            # The backend is this plugin's setting; the credential behind it,
-            # if any, belongs to the bot and never reaches here.
+            # Both backends are this plugin's own. The free one needs no
+            # credential at all; the AI one borrows the bot's provider through
+            # ctx.ai, which never hands the key over.
             mode = await self.plugin.settings.get("mode")
-            result = await self.plugin.ctx.translate.text(
-                text[:MAX_TEXT_LENGTH], target_base_lang, mode
+            result = await translate(
+                self.plugin.ctx, text[:MAX_TEXT_LENGTH], target_base_lang, mode
             )
         except TranslationError as e:
             self.plugin.log.error("Translation failed: %s", e)
@@ -73,7 +75,7 @@ class TranslatorPlugin(Plugin):
         PluginSetting(
             "mode",
             SettingType.SELECT,
-            default="google_free",
+            default=MODE_FREE,
             label="Translation backend",
             description=(
                 "Free needs no setup but is rate limited under load. AI reuses the API key "
@@ -81,8 +83,8 @@ class TranslatorPlugin(Plugin):
                 "idiom and context better."
             ),
             choices=(
-                ("google_free", "Google Translate — free, no key required"),
-                ("ai", "AI translation — uses the bot's AI provider"),
+                (MODE_FREE, "Google Translate — free, no key required"),
+                (MODE_AI, "AI translation — uses the bot's AI provider"),
             ),
         ),
     )

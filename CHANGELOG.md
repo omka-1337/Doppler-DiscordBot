@@ -33,6 +33,11 @@ much less often than the bot around it.
 
 ### Fixed
 
+- The bot's and the operator's avatar could vanish from the dashboard until a
+  restart. Every page render asked Discord for both identities, so a burst of
+  renders could be rate limited, and a failed lookup was answered with a blank
+  name and no avatar. They are cached now, and a failed refresh keeps the last
+  good answer instead of discarding it.
 - Disabling a plugin with a sidecar left its client reconnecting forever. The
   container was stopped before the plugin's teardown ran, so the library saw an
   unexpected drop and retried a host that no longer resolved. Sidecars now stop

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import platform
 import secrets
@@ -161,67 +162,100 @@ app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="
 
 # ---------------------------------------------------------------------
 
-async def get_user_avatar(user_id: str) -> str | None:
-    """The logged-in account's avatar, looked up with the bot token.
+# Identities come from Discord, and every dashboard render used to ask again.
+# That is two API calls per page view, so a burst of renders can be rate limited
+# -- and the old code answered a failure with a blank name and no avatar, which
+# looks exactly like something being broken. Cached, and a failed refresh keeps
+# serving the last good answer rather than throwing it away.
+_IDENTITY_TTL = 600.0
+_identity_cache: dict[str, tuple[float, object]] = {}
 
-    Resolved per render rather than stored in the session, so a session made
-    before avatars were shown still gets one, and a changed avatar shows up.
-    """
-    token = os.getenv("DISCORD_BOT_TOKEN", "")
-    if not token or not user_id:
-        return None
+_UNKNOWN_BOT = {"username": "Discord Bot", "global_name": "Discord Bot", "avatar_url": None}
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{DISCORD_API_BASE}/users/{user_id}",
-                headers={"Authorization": f"Bot {token}"},
-                timeout=10.0,
-            )
-        if response.status_code != 200:
-            return None
-        data = response.json()
-    except Exception as e:
-        print(f"Could not fetch the dashboard user's avatar: {e}")
-        return None
 
-    avatar_hash = data.get("avatar")
+def _cached(key: str):
+    entry = _identity_cache.get(key)
+    if entry is None:
+        return None, False
+    stored_at, value = entry
+    return value, (time.time() - stored_at) < _IDENTITY_TTL
+
+
+def _remember(key: str, value):
+    _identity_cache[key] = (time.time(), value)
+    return value
+
+
+def _avatar_url(user_id, avatar_hash) -> str | None:
     return f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png" if avatar_hash else None
 
 
-async def get_bot_info() -> dict:
-    # Read at call time, not from the import-time constant: on a fresh install
-    # this process starts with no token, and the one entered during setup would
-    # otherwise be invisible here until the container was restarted.
+async def _discord_user(path: str) -> dict | None:
     token = os.getenv("DISCORD_BOT_TOKEN", "")
     if not token:
-        return {"username": "Discord Bot", "global_name": "Discord Bot", "avatar_url": None}
+        return None
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{DISCORD_API_BASE}{path}",
+                headers={"Authorization": f"Bot {token}"},
+                timeout=10.0,
+            )
+    except Exception as e:
+        logging.warning("Discord lookup %s failed: %s", path, e)
+        return None
 
-    headers = {"Authorization": f"Bot {token}"}
+    if response.status_code != 200:
+        # 429 is the one that matters here, and it is temporary by definition.
+        logging.warning("Discord lookup %s returned %s", path, response.status_code)
+        return None
+    return response.json()
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get("https://discord.com/api/v10/users/@me", headers=headers)
-            if response.status_code == 200:
-                data = response.json()
 
-                avatar_hash = data.get("avatar")
-                user_id = data.get("id")
-                avatar_url = (
-                    f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
-                    if avatar_hash
-                    else None
-                )
+async def get_user_avatar(user_id: str) -> str | None:
+    """The logged-in account's avatar, looked up with the bot token."""
+    if not user_id:
+        return None
 
-                return {
-                    "username": data.get("username", "Discord Bot"),
-                    "global_name": data.get("global_name") or data.get("username"),
-                    "avatar_url": avatar_url,
-                }
-        except Exception as e:
-            print(f"Error retrieving the bot's profile: {e}")
+    key = f"user:{user_id}"
+    value, fresh = _cached(key)
+    if fresh:
+        return value
 
-    return {"username": "Discord Bot", "global_name": "Discord Bot", "avatar_url": None}
+    data = await _discord_user(f"/users/{user_id}")
+    if data is None:
+        # Stale beats blank: an avatar from ten minutes ago is still right.
+        return value
+
+    return _remember(key, _avatar_url(user_id, data.get("avatar")))
+
+
+async def get_bot_info() -> dict:
+    # The token is read at call time, not from the import-time constant: on a
+    # fresh install this process starts without one, and the token entered
+    # during setup would otherwise stay invisible until a restart.
+    if not os.getenv("DISCORD_BOT_TOKEN", ""):
+        return dict(_UNKNOWN_BOT)
+
+    value, fresh = _cached("bot")
+    if fresh:
+        return dict(value)
+
+    data = await _discord_user("/users/@me")
+    if data is None:
+        return dict(value) if value else dict(_UNKNOWN_BOT)
+
+    return dict(_remember("bot", {
+        "username": data.get("username", "Discord Bot"),
+        "global_name": data.get("global_name") or data.get("username"),
+        "avatar_url": _avatar_url(data.get("id"), data.get("avatar")),
+    }))
+
+
+def forget_identities() -> None:
+    """Drop the cache, so a new token is reflected at once."""
+    _identity_cache.clear()
+
 
 # ---------------------------------------------------------------------
 
@@ -409,6 +443,7 @@ async def setup_save(payload: SetupSecretPayload):
     update_env_file("DISCORD_CLIENT_SECRET", secret)
     os.environ["DISCORD_BOT_TOKEN"] = token
     os.environ["DISCORD_CLIENT_SECRET"] = secret
+    forget_identities()
 
     # The bot container is not shown .env, and compose only reads it when the
     # stack comes up — so the token also goes in the database, where the bot

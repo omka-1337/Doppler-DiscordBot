@@ -12,11 +12,7 @@ async function saveSettings(event, category) {
     const form = event.target;
     const formData = new FormData(form);
 
-    // Choose active status element based on visible tab
-    const isCogTab = !document.getElementById('tab-music').classList.contains('hidden');
-    const statusMsg = isCogTab
-        ? document.getElementById('moduleStatusMsg')
-        : document.getElementById('settingsStatusMsg');
+    const statusMsg = document.getElementById('settingsStatusMsg');
 
     const settingsPayload = {
         category: category,
@@ -76,62 +72,6 @@ async function loadSystemSettings() {
 }
 
 // ---------------------------------------------------------------------
-
-async function loadYouTubeOAuthStatus() {
-    const statusEl = document.getElementById('youtube-oauth-status');
-    if (!statusEl) return;
-
-    try {
-        const res = await fetch('/api/music/youtube-oauth-status');
-        const data = await res.json();
-
-        if (res.ok && data.status == 'ok') {
-            statusEl.textContent = data.configured ? '✅ Configured' : '⚠️ Not configured';
-            statusEl.className = data.configured
-                ? 'text-[10px] text-green-400'
-                : 'text-[10px] text-amber-400';
-        } else {
-            statusEl.textContent = '❌ Unable to reach Lavalink';
-            statusEl.className = 'text-[10px] text-red-400';
-        }
-
-    } catch (err) {
-        console.error('Error loading YouTube OAuth status:', err);
-        statusEl.textContent = '❌ Error connecting to server';
-        statusEl.className = 'text-[10px] text-red-400';
-    }
-}
-
-async function saveYouTubeOAuthToken() {
-    const tokenInput = document.getElementById('youtube-refresh-token');
-    if (!tokenInput) return;
-
-    const token = tokenInput.value.trim();
-    if (!token) {
-        alert('Please enter a refresh token.');
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/music/youtube-oauth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: token })
-        });
-        const data = await res.json();
-
-        if (res.ok && data.status === 'ok') {
-            alert('YouTube OAuth token saved successfully!');
-            tokenInput.value = '';
-            await loadYouTubeOAuthStatus();
-        } else {
-            alert('Failed to save token: ' + (data.message || 'unknown error'));
-        }
-    } catch (err) {
-        console.error('Error saving YouTube OAuth token:', err);
-        alert('Error connecting to the server.');
-    }
-}
 
 // ---------------------------------------------------------------------
 
@@ -275,8 +215,6 @@ function connectLogsWebSocket() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadSystemSettings();
-    loadMusicBots();
-    loadYouTubeOAuthStatus();
     initStats();
     connectLogsWebSocket();
     loadPluginPages();
@@ -364,162 +302,6 @@ function switchTab(tabName) {
     }
 }
 
-// ---------------------------- MUSIC BOTS LOGIC ----------------------------
-
-// Fetch and display all music bots on load
-async function loadMusicBots() {
-    try {
-        const res = await fetch('/api/music/bots');
-        if (!res.ok) throw new Error('Failed to fetch music bots');
-
-        const data = await res.json();
-        const container = document.getElementById('music-bots-container');
-        if (!container) return;
-
-        container.innerHTML = '';
-        const bots = data.bots || [];
-
-        bots.forEach(bot => {
-            const rowElement = createMusicBotRow(bot);
-            container.appendChild(rowElement);
-        });
-    } catch (err) {
-        console.error('Error loading music bots:', err);
-    }
-}
-
-// Generate single Music Bot DOM row
-function createMusicBotRow(bot) {
-    const botRowId = bot.id !== undefined ? bot.id : (bot.bot_rowid !== undefined ? bot.bot_rowid : bot[0]);
-    const token = bot.bot_token !== undefined ? bot.bot_token : (bot.token || bot[1] || '');
-    const isActive = bot.bot_status === 1 || bot.is_active === true || bot[3] === 1;
-
-    const row = document.createElement('div');
-    row.id = `music-bot-row-${botRowId}`;
-    row.className = 'bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3';
-
-    row.innerHTML = `
-        <div class="flex-1 flex items-center gap-2">
-            <input type="password" id="music-token-${botRowId}" value="${token}" placeholder="Enter Bot Token..."
-                class="w-full bg-[#2b2d31] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
-            <button type="button" onclick="saveMusicBotToken(${botRowId})" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded font-semibold transition flex-shrink-0">
-                Save
-            </button>
-        </div>
-        <div class="flex items-center justify-between sm:justify-end gap-4">
-            <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="music-active-${botRowId}" ${isActive ? 'checked' : ''} onchange="toggleMusicBotActive(${botRowId}, this.checked)" class="sr-only peer">
-                <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
-            <button type="button" onclick="removeMusicBot(${botRowId})" class="bg-red-600/80 hover:bg-red-600 text-white text-xs px-2.5 py-1.5 rounded transition font-semibold flex-shrink-0">
-                Delete
-            </button>
-        </div>
-    `;
-
-    return row;
-}
-
-// Add a new music bot instance
-async function addMusicBot() {
-    try {
-        const res = await fetch('/api/music/add-bot', { method: 'POST' });
-        const data = await res.json();
-
-        if (res.ok && data.status === 'ok') {
-            const container = document.getElementById('music-bots-container');
-            const newRow = createMusicBotRow({ bot_rowid: data.bot_rowid, bot_token: '', is_active: false });
-            container.appendChild(newRow);
-        } else {
-            alert('Failed to add new music bot.');
-        }
-    } catch (err) {
-        console.error('Error adding music bot:', err);
-        alert('Error connecting to the server.');
-    }
-}
-
-// Save specific music bot token
-async function saveMusicBotToken(botRowId) {
-    const tokenInput = document.getElementById(`music-token-${botRowId}`);
-    if (!tokenInput) return;
-
-    const botToken = tokenInput.value.trim();
-
-    try {
-        const res = await fetch('/api/music/save-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bot_rowid: botRowId, bot_token: botToken })
-        });
-        const data = await res.json();
-
-        if (res.ok && data.status === 'ok') {
-            alert('Music bot token saved successfully!');
-        } else {
-            alert('Failed to save token.');
-        }
-    } catch (err) {
-        console.error('Error saving bot token:', err);
-        alert('Error connecting to the server.');
-    }
-}
-
-// Toggle active state (0 / 1)
-async function toggleMusicBotActive(botRowId, isActive) {
-    try {
-        const res = await fetch('/api/music/toggle-active', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bot_rowid: botRowId, is_active: isActive })
-        });
-        const data = await res.json();
-
-        if (!res.ok || data.status !== 'ok') {
-            alert('Failed to toggle bot active state.');
-            // Revert checkbox if request failed
-            const chk = document.getElementById(`music-active-${botRowId}`);
-            if (chk) chk.checked = !isActive;
-        }
-    } catch (err) {
-        console.error('Error toggling bot state:', err);
-        alert('Error connecting to the server.');
-    }
-}
-
-// Remove music bot instance
-async function removeMusicBot(botRowId) {
-    if (!confirm('Are you sure you want to remove this music bot?')) return;
-
-    try {
-        const res = await fetch('/api/music/remove-bot', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bot_rowid: botRowId })
-        });
-        const data = await res.json();
-
-        if (res.ok && data.status === 'ok') {
-            const row = document.getElementById(`music-bot-row-${botRowId}`);
-            if (row) row.remove();
-        } else {
-            alert('Failed to remove music bot.');
-        }
-    } catch (err) {
-        console.error('Error removing music bot:', err);
-        alert('Error connecting to the server.');
-    }
-}
-
-async function handleToggle(event, botId) {
-    event.preventDefault();
-
-    await fetch('/api/music/toggle-active', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bot_rowid: botId })
-    });
-}
 // ---------------------------------------------------------------------
 // PLUGINS
 //

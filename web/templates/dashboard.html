@@ -39,10 +39,6 @@
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition bg-indigo-600 text-white">
                 {{ t.tabs.stats }}
             </button>
-            <button onclick="switchTab('music')" id="btn-music"
-                class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
-                {{ t.tabs.music }}
-            </button>
             <button onclick="switchTab('plugins')" id="btn-plugins"
                 class="tab-btn px-4 py-2 rounded text-sm font-semibold transition text-gray-400 hover:bg-[#35373c]">
                 {{ t.tabs.plugins }}
@@ -153,62 +149,6 @@
                     class="bg-[#1e1f22] border border-[#3f4147] rounded p-3 h-96 overflow-y-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
                 </div>
             </div>
-        </div>
-
-        <!-- 2. TAB: MUSIC -->
-        <div id="tab-music" class="tab-content hidden space-y-6">
-
-            <div
-                class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg flex items-center justify-between">
-                <div>
-                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                        {{ t.tabs.music }}
-                    </h2>
-                    <p class="text-xs text-gray-400 mt-1"> {{ t.music.description }} </p>
-                </div>
-            </div>
-
-            <!-- MODULE: MUSIC SETTINGS -->
-            <div id="form-module-Music"
-                class="bg-[#2b2d31] p-6 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
-
-                <!-- YouTube OAuth Status -->
-                <div class="bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] space-y-2">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <span class="block text-xs font-bold text-gray-300 uppercase">YouTube OAuth</span>
-                            <span id="youtube-oauth-status" class="text-[10px] text-gray-400">Checking...</span>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <input type="password" id="youtube-refresh-token" placeholder="Paste refresh token..."
-                            class="flex-1 bg-[#2b2d31] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
-                        <button type="button" onclick="saveYouTubeOAuthToken()"
-                            class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded font-semibold transition flex-shrink-0">
-                            Save
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Header & Add Bot Button -->
-                <div class="flex items-center justify-between border-b border-[#3f4147] pb-2">
-                    <h3 class="text-md font-bold text-gray-200 uppercase text-xs tracking-wider">Music Instances</h3>
-                    <button type="button" onclick="addMusicBot()"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded text-xs transition flex items-center gap-1 shadow">
-                        + Add Bot
-                    </button>
-                </div>
-
-                <!-- Dynamic Container for Music Bots -->
-                <div id="music-bots-container" class="space-y-3">
-                    <!-- Rows will be injected here via JavaScript -->
-                </div>
-
-            </div>
-
-            <p id="moduleStatusMsg"
-                class="text-sm font-semibold hidden p-3 rounded bg-[#2b2d31] border border-[#3f4147] text-center"></p>
-
         </div>
 
         <!-- 3. TAB: SETTINGS -->

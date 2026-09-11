@@ -4,6 +4,18 @@ Doppler's own version. The plugin API is versioned separately — a plugin
 declares the API it targets in its `plugin.json`, and that contract changes
 much less often than the bot around it.
 
+## Unreleased
+
+### Changed
+
+- Music moved out of the dashboard and into the plugin's own page, the way the
+  embed builder did. The worker table, the YouTube token and the Lavalink
+  settings were the plugin's all along; the core no longer carries routes for
+  one plugin.
+- Music worker cards now show each account's Discord avatar and name, plus
+  whether it is online. A column of identical token fields told the operator
+  nothing about which account was which.
+
 ## 0.4.0 — 2026-09-11
 
 ### Added

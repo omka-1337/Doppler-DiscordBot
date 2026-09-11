@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dopplerbot.database import get_settings_by_category, set_settings
-from dopplerbot.plugins.api import Plugin, PluginContext, ServiceUnavailable
+from dopplerbot.plugins.api import Plugin, PluginContext, ServiceUnavailable, SettingType
 from dopplerbot.plugins.manifest import (
     PLUGIN_PACKAGE,
     PluginManifest,
@@ -113,6 +113,20 @@ def _purge_modules(module_prefix: str):
     for name in doomed:
         del sys.modules[name]
     importlib.invalidate_caches()
+
+
+
+# Discord ids are 64-bit, and JSON numbers become doubles in a browser -- an id
+# like ...763230 comes back as ...763200, silently off by a few digits. The
+# panel would then fail to match it against the real channel, and saving the
+# form would write the rounded value back. These go out as strings; the plugin
+# side still gets ints from ctx.settings.
+_ID_TYPES = (SettingType.CHANNEL, SettingType.CATEGORY, SettingType.ROLE)
+
+
+def _for_the_panel(values: dict, schema) -> dict:
+    id_keys = {s.key for s in schema if s.type in _ID_TYPES}
+    return {k: (str(v) if k in id_keys else v) for k, v in values.items()}
 
 
 class PluginRegistry:
@@ -305,6 +319,6 @@ class PluginRegistry:
                 "running": entry is not None,
                 "error": self.errors.get(plugin_id),
                 "settings_schema": [s.to_dict() for s in schema if not s.hidden],
-                "values": await entry.context.settings.all() if entry else {},
+                "values": _for_the_panel(await entry.context.settings.all(), schema) if entry else {},
             })
         return out

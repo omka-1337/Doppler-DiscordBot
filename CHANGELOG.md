@@ -33,6 +33,10 @@ much less often than the bot around it.
 
 ### Fixed
 
+- Channel, category and role ids reached the dashboard as JSON numbers, which a
+  browser rounds: an id ending 763230 arrived as 763200. The panel showed the
+  wrong id, and saving the form wrote the rounded value back. They are sent as
+  strings now; plugins still read them as ints.
 - Importing the bot module no longer starts a log file of its own. Any tool that
   imported it to reach a helper opened a run log and could prune a real one out
   of the way; logging is set up when the bot actually runs.

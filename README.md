@@ -1,25 +1,54 @@
 # Doppler
 
-**Version 0.4.0** · [Changelog](CHANGELOG.md) · [Plugin API 2.0](documentation.md)
+**Version 0.5.0** · [Changelog](CHANGELOG.md) · [Plugin API 2.1](documentation.md)
 
 Doppler is a self-hosted, open-source Discord bot with a web dashboard for configuration — no code editing or redeploys needed for day-to-day settings changes.
 
-## Features
+## What Doppler is
 
-- 🎵 **Music** *(plugin)* — `/play` with queue support, playback controlled via on-message buttons (pause/resume, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink)/[wavelink](https://github.com/PythonistaGuild/Wavelink); multiple worker bot accounts can be added so several voice channels can play music at the same time.
-- 🤖 **AI Chat** *(plugin)* — conversational AI; the persona name, system prompt, language and tone are the plugin's settings, while the provider (Google Gemini, DeepSeek, or ChatGPT) and its API key belong to the bot under **Settings → AI Provider**.
-- 🌐 **Message Translation** *(plugin)* — right-click any message → Apps → Translate. Free and keyless by default, or switch it to the AI provider you already configured for better idiom and context.
-- 🔊 **Temporary Voice Channels** *(plugin)* — joining a configured "hub" channel automatically creates a private voice channel for the user, with buttons to rename it, set a user limit, change the bitrate, lock it and allow specific people in.
-- 🛡️ **Moderation** *(plugin)* — `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with an optional mod-log channel and role-hierarchy checks.
-- 🛠️ **Rich Embed Builder** *(plugin)* — build Discord messages visually using Components V2: independent cards with text, images, thumbnails and link buttons, then send them with `/embed <name>`. The builder is the plugin's own page, rendered by the dashboard in a sandboxed frame.
-- 🔒 **Server Protect** *(plugin)* — optional raid/alt mitigation. Checks every new member's account age on join (DMs the reason and kicks if too new; grants a role automatically otherwise), and detects join bursts — react with an admin-gated alert or fully automatic lockdown (revokes invites, rejects new joins for a while).
-- 🧠 **Plugins** — every feature above is one. Install from a source, then enable, configure and reload from the dashboard; reloading applies a plugin's new code *without restarting the bot*.
-- 📊 **Web Dashboard** — live bot stats (uptime, host CPU/RAM, live-tailed logs), a plugin browser for installing from a source, and generated settings forms for everything installed.
-- 🔐 **Dashboard Login** — the dashboard is behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It is set up during first run rather than being optional, so a fresh install is never briefly open. The Client ID is detected automatically, and both the setup and login pages show the exact redirect URI to register.
+**Doppler ships empty.** The bot itself hosts plugins and little else: everything
+you would call a feature is installed from a source through the dashboard's
+**Plugins → Browse** tab, then enabled, configured and reloaded from **Plugins →
+Installed**. Reloading swaps a plugin's code *without restarting the bot*.
 
-**Doppler ships empty.** Every feature above is a plugin, installed from the dashboard's **Plugins → Browse** tab and then enabled, configured and reloaded from **Plugins → Installed**. The official plugins live on this repository's [`doppler/plugins`](../../tree/doppler/plugins) branch, which is configured as a trusted source out of the box.
+The official plugins live on this repository's
+[`doppler/plugins`](../../tree/doppler/plugins) branch, configured as a trusted
+source out of the box.
 
-The bot keeps one command of its own: `/bot-info` reports the bot version, the plugin API version and every running plugin with its own version. Everything else comes from plugins.
+### The bot
+
+- 🧩 **Plugin host** — install, enable, configure and reload plugins while the
+  bot stays connected. Each plugin declares its settings in code and the
+  dashboard generates the form; see [documentation.md](documentation.md).
+- 📊 **Web dashboard** — live bot stats, a log streamed as it is written, a
+  plugin browser, and generated settings forms. Channel, category and role
+  settings are pickers filled from your server, not boxes for an id.
+- 🩺 **Diagnostics report** — one file with versions, plugin state, sidecar
+  containers and the current log, for attaching to a bug report. Secret values
+  are replaced with their length.
+- 🔐 **Dashboard login** — behind "Login with Discord"; only the home server's
+  owner or an Administrator gets in. Set up during first run rather than being
+  optional, so a fresh install is never briefly open.
+- 🤖 **AI provider** — the provider, its API key and the model are the bot's
+  settings, shared by every plugin that uses a model. The key is held by the
+  broker, outside the process plugins run in.
+- ℹ️ **`/bot-info`** — the bot's one command: bot version, plugin API version
+  and every running plugin with its own version.
+
+### Available plugins
+
+| Plugin | What it does |
+| --- | --- |
+| 📻 **Music** | `/play` with a queue and on-message controls (pause, skip, stop, loop, queue). Runs on [Lavalink](https://github.com/lavalink-devs/Lavalink) via [wavelink](https://github.com/PythonistaGuild/Wavelink), started automatically as a sidecar container. Several worker bot accounts can play in different voice channels at once, managed from the plugin's own dashboard page. |
+| 🤖 **AI Chat** | Mention the bot and it replies. The persona name, system prompt, language and tone are the plugin's settings; the provider and key belong to the bot. |
+| 🌐 **Message Translation** | Right-click a message → Apps → Translate. Free and keyless by default, or switched to the bot's AI provider for better idiom. |
+| 🔊 **Temporary Voice Channels** | Joining a hub channel creates a private voice channel for that member, with buttons to rename it, set a limit, change the bitrate, lock it and let specific people in. |
+| 🛡️ **Moderation** | `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/warn`, with role-hierarchy checks and an optional mod-log channel. |
+| 🛠️ **Embed Sender** | Build Components V2 messages visually — independent cards with text, images, thumbnails and link buttons — then send them with `/embed <name>`. The builder is the plugin's own page, rendered in a sandboxed frame. |
+| 🛡️ **Server Protect** | Raid and alt mitigation. Checks each new member's account age on join, and reacts to join bursts with an admin-gated alert or an automatic lockdown. |
+
+A plugin from a trusted source can also add its own tab to the dashboard, which
+is how the music and embed pages get there.
 
 ## Plugins
 

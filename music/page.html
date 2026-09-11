@@ -1,0 +1,239 @@
+<!-- The music plugin's dashboard page, served into a sandboxed frame.
+     No same-origin access: every call goes through window.doppler, which the
+     host confines to this plugin's own endpoints. -->
+<meta charset="utf-8">
+<script src="https://cdn.tailwindcss.com"></script>
+
+<body class="bg-[#1e1f22] text-gray-200 font-sans p-1">
+
+  <div class="space-y-6">
+
+    <!-- YOUTUBE OAUTH -->
+    <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg space-y-3">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider">YouTube OAuth</h2>
+          <p id="ytStatus" class="text-[11px] text-gray-400 mt-0.5">Checking...</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <input type="password" id="ytToken" placeholder="Paste refresh token..."
+          class="flex-1 bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
+        <button type="button" id="ytSave"
+          class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded font-semibold transition flex-shrink-0">
+          Save
+        </button>
+      </div>
+      <p class="text-[11px] text-gray-500">
+        Optional. Lets Lavalink play sources that need a signed-in client.
+      </p>
+    </div>
+
+    <!-- WORKER ACCOUNTS -->
+    <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg space-y-4">
+      <div class="flex items-center justify-between border-b border-[#3f4147] pb-2">
+        <div>
+          <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider">Worker accounts</h2>
+          <p class="text-[11px] text-gray-400 mt-0.5">
+            Each is a separate Discord bot account. One plays in one voice channel at a time.
+          </p>
+        </div>
+        <button type="button" id="addWorker"
+          class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded text-xs transition flex-shrink-0">
+          + Add worker
+        </button>
+      </div>
+
+      <div id="workers" class="space-y-3">
+        <p class="text-xs text-gray-400">Loading...</p>
+      </div>
+    </div>
+
+    <p id="status" class="hidden text-xs font-semibold p-3 rounded text-center"></p>
+  </div>
+
+<script>
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[c]);
+}
+
+const statusEl = document.getElementById('status');
+let statusTimer = null;
+
+function say(text, ok) {
+  statusEl.textContent = text;
+  statusEl.className = ok
+    ? 'text-xs font-semibold p-3 rounded text-center bg-[#2b2d31] border border-green-500/50 text-green-400'
+    : 'text-xs font-semibold p-3 rounded text-center bg-[#2b2d31] border border-red-500/50 text-red-400';
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => statusEl.classList.add('hidden'), 6000);
+}
+
+// ---------------------------------------------------------------- workers
+
+const workersEl = document.getElementById('workers');
+
+function workerCard(bot) {
+  const card = document.createElement('div');
+  card.className = 'bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] space-y-3';
+
+  // Identity first: a row of opaque tokens is impossible to tell apart, so the
+  // account's own avatar and name are what the operator actually recognises.
+  const name = bot.global_name || bot.username;
+  const initial = name ? name.charAt(0).toUpperCase() : '?';
+  const avatar = bot.avatar_url
+    ? `<img src="${esc(bot.avatar_url)}" alt="" class="w-9 h-9 rounded-full flex-shrink-0 border border-[#3f4147]">`
+    : `<div class="w-9 h-9 rounded-full bg-[#4e5058] flex-shrink-0 flex items-center justify-center font-bold text-white text-sm">${esc(initial)}</div>`;
+
+  const state = bot.running
+    ? '<span class="flex items-center gap-1.5 text-[11px] text-green-400"><span class="w-2 h-2 rounded-full bg-green-500"></span>Online</span>'
+    : bot.active
+      ? '<span class="flex items-center gap-1.5 text-[11px] text-amber-400"><span class="w-2 h-2 rounded-full bg-amber-500"></span>Starting</span>'
+      : '<span class="flex items-center gap-1.5 text-[11px] text-gray-500"><span class="w-2 h-2 rounded-full bg-gray-600"></span>Off</span>';
+
+  card.innerHTML = `
+    <div class="flex items-center gap-3">
+      ${avatar}
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-white text-sm truncate">
+          ${name ? esc(name) : '<span class="text-gray-500 italic font-normal">Not identified yet</span>'}
+        </div>
+        <div class="text-[11px] text-gray-500 truncate">
+          ${name ? esc('@' + bot.username) : 'Add a token and switch it on'}
+        </div>
+      </div>
+      <div class="flex items-center gap-4 flex-shrink-0">
+        ${state}
+        <label class="relative inline-flex items-center cursor-pointer" title="Run this worker">
+          <input type="checkbox" class="sr-only peer" ${bot.active ? 'checked' : ''} data-act="${bot.id}">
+          <div class="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+        </label>
+        <button type="button" data-del="${bot.id}"
+          class="bg-red-600/80 hover:bg-red-600 text-white text-xs px-2.5 py-1.5 rounded transition font-semibold">
+          Delete
+        </button>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <input type="password" value="${esc(bot.token)}" placeholder="Bot token..." data-tok="${bot.id}"
+        class="flex-1 bg-[#2b2d31] border border-[#3f4147] rounded p-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 transition">
+      <button type="button" data-save="${bot.id}"
+        class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded font-semibold transition flex-shrink-0">
+        Save
+      </button>
+    </div>
+  `;
+  return card;
+}
+
+async function loadWorkers() {
+  let bots;
+  try {
+    bots = (await doppler.call('GET', '/bots')).bots || [];
+  } catch (e) {
+    workersEl.innerHTML = `<p class="text-xs text-red-400">${esc(e.message)}</p>`;
+    return;
+  }
+
+  if (!bots.length) {
+    workersEl.innerHTML = '<p class="text-xs text-gray-400">No workers yet. Add one to start playing.</p>';
+    return;
+  }
+
+  workersEl.innerHTML = '';
+  bots.forEach(b => workersEl.appendChild(workerCard(b)));
+}
+
+// One listener for the whole list rather than inline handlers: the cards are
+// rebuilt on every refresh, and a sandboxed page has no global scope to bind to.
+workersEl.addEventListener('click', async (event) => {
+  const del = event.target.closest('[data-del]');
+  const save = event.target.closest('[data-save]');
+
+  if (del) {
+    if (!confirm('Delete this worker account?')) return;
+    try {
+      const r = await doppler.call('POST', '/remove', { id: Number(del.dataset.del) });
+      if (r.status !== 'ok') throw new Error(r.message || 'Could not delete it.');
+      say('Worker deleted.', true);
+    } catch (e) { say(e.message, false); }
+    loadWorkers();
+    return;
+  }
+
+  if (save) {
+    const id = Number(save.dataset.save);
+    const field = workersEl.querySelector(`[data-tok="${id}"]`);
+    try {
+      const r = await doppler.call('POST', '/save-token', { id, token: field.value });
+      if (r.status !== 'ok') throw new Error(r.message || 'Could not save it.');
+      say('Token saved. The worker restarts with it.', true);
+    } catch (e) { say(e.message, false); }
+    loadWorkers();
+  }
+});
+
+workersEl.addEventListener('change', async (event) => {
+  const toggle = event.target.closest('[data-act]');
+  if (!toggle) return;
+
+  const id = Number(toggle.dataset.act);
+  try {
+    const r = await doppler.call('POST', '/set-active', { id, active: toggle.checked });
+    if (r.status !== 'ok') throw new Error(r.message || 'Could not change it.');
+  } catch (e) {
+    say(e.message, false);
+  }
+  // Starting takes a moment, so the card is refreshed once the worker has had
+  // time to connect and report who it is.
+  loadWorkers();
+  setTimeout(loadWorkers, 4000);
+});
+
+document.getElementById('addWorker').addEventListener('click', async () => {
+  try {
+    const r = await doppler.call('POST', '/add', {});
+    if (r.status !== 'ok') throw new Error(r.message || 'Could not add it.');
+  } catch (e) { say(e.message, false); }
+  loadWorkers();
+});
+
+// ---------------------------------------------------------------- youtube
+
+const ytStatus = document.getElementById('ytStatus');
+
+async function loadYouTube() {
+  try {
+    const r = await doppler.call('GET', '/youtube');
+    if (r.status !== 'ok') {
+      ytStatus.textContent = r.message || 'Unavailable.';
+      ytStatus.className = 'text-[11px] text-amber-400 mt-0.5';
+      return;
+    }
+    ytStatus.textContent = r.configured ? 'Configured' : 'Not configured';
+    ytStatus.className = r.configured
+      ? 'text-[11px] text-green-400 mt-0.5'
+      : 'text-[11px] text-gray-400 mt-0.5';
+  } catch (e) {
+    ytStatus.textContent = e.message;
+    ytStatus.className = 'text-[11px] text-red-400 mt-0.5';
+  }
+}
+
+document.getElementById('ytSave').addEventListener('click', async () => {
+  try {
+    const r = await doppler.call('POST', '/youtube', {
+      refresh_token: document.getElementById('ytToken').value
+    });
+    if (r.status !== 'ok') throw new Error(r.message || 'Lavalink rejected it.');
+    say('Refresh token saved.', true);
+  } catch (e) { say(e.message, false); }
+  loadYouTube();
+});
+
+loadWorkers();
+loadYouTube();
+</script>
+</body>

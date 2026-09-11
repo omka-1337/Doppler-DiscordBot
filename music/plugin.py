@@ -2,6 +2,7 @@ from dopplerbot.plugins.api import Plugin, PluginSetting, ServiceUnavailable, Se
 
 from .commands import MusicCommands
 from .manager import MusicBotsManager
+from .panel import MusicPanel
 from .store import MusicBotStore
 
 
@@ -45,6 +46,11 @@ class MusicPlugin(Plugin):
 
         await self.ctx.add_cog(MusicBotsManager(self))
         await self.ctx.add_cog(MusicCommands(self))
+
+        # Worker accounts are a table with live processes behind them, which no
+        # generated settings form can express -- so this plugin ships a page.
+        self.panel = MusicPanel(self)
+        self.panel.register(self.ctx)
 
     async def _ensure_lavalink(self):
         """Ask the broker for the Lavalink sidecar declared in the manifest.

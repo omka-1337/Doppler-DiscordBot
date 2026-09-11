@@ -4,7 +4,7 @@ Reference for writing a Doppler plugin. This is the GitHub rendering of the
 reference the dashboard serves at `/docs/plugins`; the dashboard copy fills in
 the API version your own install implements.
 
-**Plugin API 1.1**
+**Plugin API 2.0**
 
 - [Overview](#overview)
 - [Quick start](#quick-start)
@@ -47,7 +47,7 @@ A complete, working plugin.
     "id": "hello",
     "name": "Hello",
     "version": "1.0.0",
-    "api_version": "1.1",
+    "api_version": "2.0",
     "description": "Replies to /hello.",
     "author": "you",
     "icon": "👋"
@@ -112,9 +112,11 @@ without importing its Python.
 ### Version compatibility
 
 A plugin loads when its `api_version` has the **same major** as the API the bot
-implements and a **minor no newer** than it. So a plugin written against 1.0
-keeps working on a bot implementing 1.1, while a plugin asking for 1.1 is
-refused by a bot implementing 1.0 rather than failing halfway through.
+implements and a **minor no newer** than it. Growing the API is therefore safe:
+a plugin written against 2.0 keeps loading on a bot implementing 2.1. Asking for
+more than the bot has is refused outright rather than failing halfway through,
+and a major bump refuses every plugin built for the previous one — which is what
+2.0 does to plugins written for 1.x.
 
 ## The Plugin class
 
@@ -299,7 +301,7 @@ nameEl.textContent = bot.global_name || bot.username;
 if (bot.avatar_url) avatarEl.src = bot.avatar_url;
 ```
 
-Added in API 1.1. Both calls reject rather than resolving with an error body, so
+Both calls reject rather than resolving with an error body, so
 wrap them and keep a sensible placeholder for when they fail.
 
 > **Trusted sources only**, for the same reason as `ctx.add_endpoint`: the page

@@ -1,6 +1,6 @@
 # Doppler
 
-**Version 0.2.0** · [Changelog](CHANGELOG.md) · [Plugin API 1.1](documentation.md)
+**Version 0.3.0** · [Changelog](CHANGELOG.md) · [Plugin API 2.0](documentation.md)
 
 Doppler is a self-hosted, open-source Discord bot with a web dashboard for configuration — no code editing or redeploys needed for day-to-day settings changes.
 
@@ -64,16 +64,15 @@ The full reference is in [documentation.md](documentation.md); a running dashboa
 The AI provider and its key are configured once, under **Settings → AI
 Provider**, and shared by every plugin that uses a model — so a key is never
 pasted into more than one place, and switching model is one change rather than
-one per plugin. Translation needs no key of its own: it is keyless by default,
-and a plugin that offers the choice can point it at the same AI provider.
+one per plugin. Translation is the translator plugin's own business: keyless by default, and
+switchable to the same AI provider from the plugin's settings.
 
 They are held by the **broker**, in a `secrets/` volume that is not mounted into
 the bot container at all, and the broker never hands a value back. A plugin asks
 for the result:
 
 ```python
-reply  = await self.ctx.ai.complete(system_prompt, prompt)
-result = await self.ctx.translate.text("hello", "uk")
+reply = await self.ctx.ai.complete(system_prompt, prompt)
 ```
 
 The call is made on the broker's side, so the credential never enters the

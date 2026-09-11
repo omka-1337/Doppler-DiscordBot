@@ -4,6 +4,27 @@ Doppler's own version. The plugin API is versioned separately — a plugin
 declares the API it targets in its `plugin.json`, and that contract changes
 much less often than the bot around it.
 
+## 0.3.0 — 2026-09-11
+
+Plugin API 2.0. **Every plugin must declare `"api_version": "2.0"`** — a plugin
+built for 1.x is refused, with the reason in the log. Update the bot first, then
+reinstall your plugins.
+
+### Changed
+
+- `documentation.md` is now the single source for the plugin API reference. The
+  dashboard renders that file at **/docs/plugins** instead of holding a second
+  copy of the same text.
+
+### Removed
+
+- `ctx.translate`, the bot's `translate` module and the broker's `/translate`
+  endpoint. Translation needs no credential, so nothing about it belonged in a
+  general plugin API or behind the secret boundary.
+- `deep-translator` from the broker. It follows the logic into the translator
+  plugin, which now declares it as a requirement and calls it directly; AI
+  translation goes through `ctx.ai` like any other plugin's model call.
+
 ## 0.2.0 — 2026-09-11
 
 Plugin API 1.1.

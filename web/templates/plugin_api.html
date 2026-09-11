@@ -7,12 +7,61 @@
     <title>Plugin API — Doppler</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        pre { tab-size: 4; }
-        .anchor:target { scroll-margin-top: 5rem; }
-        code:not(pre code) {
+        /* The body of this page is rendered from documentation.md, so it arrives
+           as plain HTML with no classes. Everything below styles those bare
+           elements; editing the reference means editing the markdown, not this. */
+        .doc { color: #d1d5db; font-size: .875rem; line-height: 1.7; }
+        .doc h2 {
+            color: #fff; font-size: 1.5rem; font-weight: 700;
+            margin: 2.5rem 0 .75rem; padding-top: .5rem;
+        }
+        .doc h2:first-child { margin-top: 0; }
+        .doc h3 {
+            color: #fff; font-size: 1rem; font-weight: 700; margin: 1.75rem 0 .5rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+        .doc p { margin: .75rem 0; }
+        .doc a { color: #818cf8; }
+        .doc a:hover { text-decoration: underline; }
+        .doc strong { color: #fff; }
+        .doc ul { list-style: disc; padding-left: 1.25rem; margin: .75rem 0; }
+        .doc li { margin: .3rem 0; }
+        .doc pre {
+            tab-size: 4; background: #1e1f22; border: 1px solid #3f4147;
+            border-radius: .5rem; padding: .75rem; overflow-x: auto;
+            margin: .75rem 0; font-size: .78rem; line-height: 1.55;
+        }
+        .doc pre code { background: none; border: 0; padding: 0; color: #d1d5db; }
+        .doc code {
             background: #1e1f22; border: 1px solid #3f4147; border-radius: .25rem;
             padding: .05rem .3rem; font-size: .85em; color: #c7d2fe;
         }
+        .doc blockquote {
+            border-left: 3px solid #f59e0b; background: #2b2d31;
+            padding: .6rem .9rem; margin: 1rem 0; border-radius: 0 .375rem .375rem 0;
+            color: #fcd34d; font-size: .8rem;
+        }
+        .doc blockquote strong { color: #fde68a; }
+        .doc blockquote p { margin: .25rem 0; }
+        .doc table {
+            width: 100%; text-align: left; font-size: .75rem; margin: 1rem 0;
+            border: 1px solid #3f4147; border-radius: .5rem; border-collapse: collapse;
+            display: block; overflow-x: auto;
+        }
+        .doc thead { background: #2b2d31; color: #9ca3af; text-transform: uppercase; }
+        .doc th, .doc td { padding: .6rem 1rem; }
+        .doc tbody tr { border-top: 1px solid #3f4147; background: #232428; }
+        .doc td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #a5b4fc; }
+        .doc h2[id], .doc h3[id] { scroll-margin-top: 5rem; }
+        /* The in-document table of contents; the sidebar already does this job. */
+        .doc > ul:first-of-type { display: none; }
+        .toc ul { list-style: none; padding: 0; margin: 0; }
+        .toc > ul > li > ul { display: none; }
+        .toc a {
+            display: block; padding: .375rem .75rem; border-radius: .25rem;
+            color: #9ca3af; font-size: .75rem; transition: all .15s;
+        }
+        .toc a:hover { background: #2b2d31; color: #fff; }
     </style>
 </head>
 
@@ -34,488 +83,19 @@
     <div class="max-w-6xl mx-auto px-6 py-8 flex gap-8">
 
         <nav class="hidden lg:block w-52 shrink-0">
-            <div class="sticky top-20 space-y-1 text-xs">
-                <a href="#overview" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Overview</a>
-                <a href="#quickstart" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Quick start</a>
-                <a href="#manifest" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">plugin.json</a>
-                <a href="#plugin-class" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">The Plugin class</a>
-                <a href="#settings" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Settings</a>
-                <a href="#context" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">The context</a>
-                <a href="#pages" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Pages</a>
-                <a href="#services" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Sidecar services</a>
-                <a href="#publishing" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">Publishing</a>
-                <a href="#limits" class="block px-3 py-1.5 rounded text-gray-400 hover:bg-[#2b2d31] hover:text-white transition">What plugins may do</a>
-            </div>
+            <div class="sticky top-20 toc">{{ toc|safe }}</div>
         </nav>
 
-        <main class="flex-1 min-w-0 space-y-10">
+        <main class="flex-1 min-w-0 doc">{{ content|safe }}</main>
 
-            <!-- OVERVIEW -->
-            <section id="overview" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">Overview</h2>
-                <p class="text-sm text-gray-300 leading-relaxed">
-                    A plugin is a folder with a <code>plugin.json</code> manifest and a Python module
-                    defining one subclass of <code>Plugin</code>. Doppler ships with no features of its
-                    own: everything is installed from a source through
-                    <a href="/#plugins" class="text-indigo-400 hover:underline">Plugins → Browse</a>.
-                </p>
-                <p class="text-sm text-gray-300 leading-relaxed mt-3">
-                    Installed plugins live in <code>plugins/</code>, which the broker writes and the bot
-                    only reads. Each is imported under a synthetic package, so a plugin's own files can
-                    import each other with relative imports, and unloading it is a matter of dropping
-                    that one module prefix — which is what lets the dashboard's <strong>Reload</strong>
-                    button swap a plugin's code while the bot stays connected.
-                </p>
-                <div class="mt-4 p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">plugins/my_plugin/
-├── plugin.json      # identity and declarations — read without importing anything
-├── plugin.py        # entrypoint: one subclass of Plugin
-└── helpers.py       # anything else; import it with "from .helpers import ..."</pre>
-                </div>
-            </section>
-
-            <!-- QUICK START -->
-            <section id="quickstart" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">Quick start</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-3">A complete, working plugin:</p>
-
-                <p class="text-xs font-bold text-gray-400 uppercase mb-1.5">plugin.json</p>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg mb-4">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">{
-  "id": "hello",
-  "name": "Hello",
-  "version": "1.0.0",
-  "api_version": "{{ api_version }}",
-  "description": "Replies to /hello.",
-  "author": "you",
-  "icon": "👋"
-}</pre>
-                </div>
-
-                <p class="text-xs font-bold text-gray-400 uppercase mb-1.5">plugin.py</p>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">import discord
-from discord import app_commands
-from discord.ext import commands
-
-from dopplerbot.plugins.api import Plugin, PluginSetting, SettingType
-
-
-class HelloCog(commands.Cog):
-    def __init__(self, plugin):
-        self.plugin = plugin
-        self.bot = plugin.bot
-
-    @app_commands.command(name="hello", description="Say hello")
-    async def hello(self, interaction: discord.Interaction):
-        greeting = await self.plugin.settings.get("greeting")
-        await interaction.response.send_message(f"{greeting}, {interaction.user.mention}!")
-
-
-class HelloPlugin(Plugin):
-    SETTINGS = (
-        PluginSetting("greeting", SettingType.STRING, default="Hello",
-                      label="Greeting", description="How the bot opens."),
-    )
-
-    async def setup(self):
-        await self.ctx.add_cog(HelloCog(self))</pre>
-                </div>
-                <p class="text-sm text-gray-400 leading-relaxed mt-3">
-                    That is the whole plugin. The settings form, the enable/disable switch and the
-                    reload button appear in the dashboard on their own.
-                </p>
-            </section>
-
-            <!-- MANIFEST -->
-            <section id="manifest" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">plugin.json</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    Plain data, deliberately: the dashboard's browser lists and describes a plugin
-                    without importing its Python.
-                </p>
-                <div class="overflow-x-auto rounded-lg border border-[#3f4147]">
-                    <table class="w-full text-xs text-left">
-                        <thead class="bg-[#2b2d31] text-gray-400 uppercase">
-                            <tr>
-                                <th class="px-4 py-2.5 font-bold">Field</th>
-                                <th class="px-4 py-2.5 font-bold">Required</th>
-                                <th class="px-4 py-2.5 font-bold">Notes</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-[#3f4147] bg-[#232428] text-gray-300">
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">id</td><td class="px-4 py-2.5">yes</td><td class="px-4 py-2.5">2–32 chars, lowercase letters, digits, underscores. Must equal the folder name, and becomes the settings namespace.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">name</td><td class="px-4 py-2.5">yes</td><td class="px-4 py-2.5">Shown on the plugin card.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">version</td><td class="px-4 py-2.5">yes</td><td class="px-4 py-2.5">Your plugin's version; free-form.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">api_version</td><td class="px-4 py-2.5">yes</td><td class="px-4 py-2.5">The plugin API you wrote against — currently <code>{{ api_version }}</code>. A plugin targeting a newer minor, or a different major, is refused rather than loaded.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">entrypoint</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">Defaults to <code>plugin.py</code>.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">description</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">One sentence, shown on the card and in the browser.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">author</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5"></td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">icon</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">One emoji. Defaults to 🧩.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">homepage</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5"></td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">requirements</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">pip packages you need. <strong>Shown, not installed</strong> — pulling packages on the operator's behalf is their decision, not the plugin's.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">default_enabled</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">Whether it starts on the first time it is seen. Defaults to true.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">page</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">A settings page of your own — see <a href="#pages" class="text-indigo-400 hover:underline">below</a>. An object with <code>title</code>, <code>entry</code> (an <code>.html</code> file in your folder) and an optional <code>icon</code>.</td></tr>
-                            <tr><td class="px-4 py-2.5 font-mono text-indigo-300">services</td><td class="px-4 py-2.5">no</td><td class="px-4 py-2.5">Sidecar containers — see <a href="#services" class="text-indigo-400 hover:underline">below</a>.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- PLUGIN CLASS -->
-            <section id="plugin-class" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">The Plugin class</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-3">
-                    The entrypoint must define exactly one subclass of <code>Plugin</code>. If you have
-                    several for some reason, set <code>PLUGIN = YourClass</code> to pick one. Identity
-                    lives in the manifest, so the class carries only behaviour.
-                </p>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg mb-4">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">class MyPlugin(Plugin):
-    SETTINGS = (...)          # the form the dashboard generates
-
-    async def setup(self):    # called when enabled or reloaded
-        ...
-
-    async def teardown(self): # called when disabled or reloaded
-        ...</pre>
-                </div>
-                <div class="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-indigo-200 text-xs leading-relaxed">
-                    Cogs and views registered through <code>self.ctx</code> are removed automatically on
-                    unload — you do not need to undo them in <code>teardown()</code>. Use it for what the
-                    context does not know about: background tasks to cancel, connections to close.
-                    Anything you leave running will still be running after a reload.
-                </div>
-                <p class="text-sm text-gray-300 leading-relaxed mt-4">
-                    <code>self.bot</code>, <code>self.settings</code> and <code>self.log</code> are
-                    shortcuts to the matching attributes on <code>self.ctx</code>.
-                </p>
-            </section>
-
-            <!-- SETTINGS -->
-            <section id="settings" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">Settings</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    Declare them once in <code>SETTINGS</code>. That single declaration is the form the
-                    dashboard renders, the defaults seeded on first load, and the only keys the plugin
-                    may read or write. Asking for a key you did not declare raises
-                    <code>PluginSettingError</code> — so a typo fails loudly instead of quietly reading
-                    nothing forever.
-                </p>
-
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg mb-4">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">PluginSetting(
-    "channel_id",                 # key: lowercase, snake_case
-    SettingType.CHANNEL,
-    default=0,
-    label="Log channel",          # defaults to a prettified key
-    description="Where entries are posted.",
-    choices=(("a", "Option A"),), # SELECT only
-    min=0, max=100, step=1,       # numeric types
-    hidden=False,                 # persisted, but not shown in the panel
-)</pre>
-                </div>
-
-                <p class="text-sm text-gray-300 leading-relaxed mb-3">
-                    Values come back coerced to the declared type — <code>BOOL</code> as a real
-                    <code>bool</code>, <code>CHANNEL</code> and <code>INT</code> as <code>int</code>:
-                </p>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg mb-4">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">channel_id = await self.settings.get("channel_id")   # int
-everything  = await self.settings.all()              # dict, all coerced
-await self.settings.set("channel_id", 123456789)</pre>
-                </div>
-
-                <p class="text-sm text-gray-300 leading-relaxed mb-3">
-                    Use <code>hidden=True</code> for state you want to survive a restart but that nobody
-                    should edit — a "lockdown is currently active" flag, say.
-                </p>
-
-                <div class="overflow-x-auto rounded-lg border border-[#3f4147]">
-                    <table class="w-full text-xs text-left">
-                        <thead class="bg-[#2b2d31] text-gray-400 uppercase">
-                            <tr>
-                                <th class="px-4 py-2.5 font-bold">SettingType</th>
-                                <th class="px-4 py-2.5 font-bold">Renders as</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-[#3f4147] bg-[#232428] text-gray-300">
-                            {% for type in setting_types %}
-                            <tr>
-                                <td class="px-4 py-2.5 font-mono text-indigo-300">{{ type.value }}</td>
-                                <td class="px-4 py-2.5">{{ type.note }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- CONTEXT -->
-            <section id="context" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">The context</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    <code>self.ctx</code> is everything a plugin is handed. Registering through it is
-                    what makes unloading complete.
-                </p>
-
-                <div class="space-y-4">
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.add_cog(cog) · ctx.add_view(view)</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed">
-                            Register a discord.py cog or a persistent view. Both are unwound when the
-                            plugin unloads. Register views this way rather than with
-                            <code>bot.add_view</code>, or a reload leaves the old one listening.
-                        </p>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.settings</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed">
-                            <code>get(key)</code>, <code>set(key, value)</code>, <code>all()</code>.
-                            Scoped to this plugin's id.
-                        </p>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.db</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
-                            This plugin's own SQLite database, at
-                            <code>savedata/plugins/&lt;id&gt;/data.db</code>. You own the schema; create
-                            it in <code>setup()</code>. Removing the plugin removes its data with it.
-                        </p>
-                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">await self.ctx.db.executescript("CREATE TABLE IF NOT EXISTS notes (...)")
-row_id = await self.ctx.db.execute("INSERT INTO notes (body) VALUES (?)", ("hi",))
-rows   = await self.ctx.db.fetchall("SELECT * FROM notes")
-one    = await self.ctx.db.fetchone("SELECT * FROM notes WHERE id = ?", (row_id,))</pre>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.ai</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
-                            Text generation using whichever provider the operator configured. The key is
-                            not yours and never reaches you — the call is made elsewhere and you get the
-                            text. Raises <code>AIError</code>.
-                        </p>
-                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">if await self.ctx.ai.is_configured():
-    reply = await self.ctx.ai.complete("You are terse.", "Say hello.")</pre>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.services</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed">
-                            <code>start(name)</code>, <code>stop(name=None)</code>,
-                            <code>wait_until_ready(name)</code> for the sidecars your manifest declares.
-                            See <a href="#services" class="text-indigo-400 hover:underline">below</a>.
-                        </p>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.add_endpoint(method, path, handler)</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
-                            Expose an HTTP endpoint at <code>/api/plugin/&lt;id&gt;&lt;path&gt;</code>, behind
-                            the dashboard's login. For settings a generated form cannot express. The handler
-                            takes an <code>aiohttp.web.Request</code>; returning a dict is shorthand for a
-                            JSON response. Removed automatically when the plugin unloads.
-                        </p>
-                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">async def list_items(self, request):
-    return {"items": [...]}
-
-self.ctx.add_endpoint("GET", "/items", self.list_items)</pre>
-                        <p class="text-[11px] text-amber-300/90 leading-relaxed mt-2">
-                            Trusted sources only. The endpoint answers on the dashboard's own origin with the
-                            operator's session attached, so it is not granted to code whose author has not been
-                            vouched for. Raises <code>PermissionError</code> otherwise — catch it and carry on
-                            if the rest of your plugin works without the page.
-                        </p>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.data_dir · ctx.savedata_dir</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed">
-                            <code>data_dir</code> is a private folder for your files, created on first
-                            use. <code>savedata_dir</code> is the bot's shared folder — only for data you
-                            deliberately share with the dashboard.
-                        </p>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.bot · ctx.log · ctx.manifest</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed">
-                            The <code>commands.Bot</code> instance, a logger named
-                            <code>plugin.&lt;id&gt;</code> that writes to the dashboard's live log, and
-                            your own parsed manifest.
-                        </p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- PAGES -->
-            <section id="pages" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">Pages</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    When a generated settings form cannot express your UI, ship an HTML file and
-                    declare it in the manifest. It gets its own tab in the dashboard, which appears
-                    when the plugin starts and disappears when it stops.
-                </p>
-
-                <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] mb-4">"page": {
-    "title": "Embed Builder",
-    "entry": "page.html",
-    "icon": "\ud83d\udee0\ufe0f"
-}</pre>
-
-                <p class="text-xs text-gray-400 leading-relaxed mb-4">
-                    The file is served into an iframe with <code>sandbox="allow-scripts"</code> and no
-                    <code>allow-same-origin</code>, so the page runs on an opaque origin. It cannot read
-                    the dashboard's cookies, its DOM, or any dashboard route. Everything it needs comes
-                    through <code>window.doppler</code>, injected ahead of your own markup.
-                </p>
-
-                <div class="space-y-3">
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">doppler.call(method, path, body)</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
-                            Calls one of <em>your</em> endpoints, declared with
-                            <code>ctx.add_endpoint</code>. The host prefixes your plugin id, so a page
-                            cannot name another plugin's endpoint or a dashboard route. Resolves with the
-                            decoded JSON, and rejects on any error response.
-                        </p>
-                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">const data = await doppler.call('POST', '/save', payload);</pre>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">doppler.bot()</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
-                            The bot's own identity, for pages that preview what a message will look
-                            like. Read-only, and identical for every page, so it comes from the host
-                            rather than each plugin serving its own copy. Resolves with
-                            <code>username</code>, <code>global_name</code> and <code>avatar_url</code>
-                            — the last is <code>null</code> when the bot has no avatar set.
-                        </p>
-                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">const bot = await doppler.bot();
-nameEl.textContent = bot.global_name || bot.username;
-if (bot.avatar_url) avatarEl.src = bot.avatar_url;</pre>
-                        <p class="text-[11px] text-gray-500 leading-relaxed mt-2">
-                            Added in API 1.1. Both calls reject rather than resolving with an error
-                            body, so wrap them and keep a sensible placeholder for when they fail.
-                        </p>
-                    </div>
-                </div>
-
-                <p class="text-[11px] text-amber-300/90 leading-relaxed mt-3">
-                    Trusted sources only, for the same reason as <code>ctx.add_endpoint</code>: the page
-                    is rendered by the dashboard for a logged-in operator. A plugin from an untrusted
-                    source keeps its settings form and simply gets no tab.
-                </p>
-            </section>
-
-            <!-- SERVICES -->
-            <section id="services" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">Sidecar services</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    A plugin that needs a service of its own declares it in the manifest. The broker —
-                    the only component with access to Docker — reads that declaration itself and starts
-                    the container. Your code only ever names a service; it cannot describe one.
-                </p>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg mb-4">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">"services": [
-  {
-    "name": "lavalink",
-    "image": "ghcr.io/lavalink-devs/lavalink:4",   // must pin a tag or digest
-    "port": 2333,                                   // reachable inside the bot's network only
-    "memory_mb": 700,
-    "env": { "_JAVA_OPTIONS": "-Xmx500m" },
-    "env_from_settings": { "LAVALINK_PASSWORD": "lavalink_password" },
-    "files": { "lavalink.yml": "/opt/Lavalink/application.yml" }
-  }
-]</pre>
-                </div>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg mb-4">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">service = await self.ctx.services.start("lavalink")
-service["uri"]   # http://doppler_plg_&lt;plugin&gt;_&lt;service&gt;:&lt;port&gt;
-await self.ctx.services.wait_until_ready("lavalink")   # the port takes time to open</pre>
-                </div>
-                <p class="text-sm text-gray-300 leading-relaxed mb-2">The broker fixes everything else, and a manifest cannot ask otherwise:</p>
-                <ul class="text-sm text-gray-400 leading-relaxed list-disc list-inside space-y-1 mb-4">
-                    <li>never privileged, all capabilities dropped, <code>no-new-privileges</code></li>
-                    <li>no ports published to the host — reachable only from the bot</li>
-                    <li>the only mounts are read-only files from inside your own plugin folder</li>
-                    <li>a memory cap, and an image that must pin a tag or digest</li>
-                </ul>
-                <div class="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-xs leading-relaxed">
-                    <strong>Trust gate.</strong> Sidecars start only for a plugin the broker installed
-                    from a source the operator marked trusted. A plugin copied in by hand still loads and
-                    runs, but gets no containers — there is no record of where it came from.
-                </div>
-            </section>
-
-            <!-- PUBLISHING -->
-            <section id="publishing" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">Publishing</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    A source is a GitHub repository and branch with one folder per plugin at the root,
-                    plus an <code>index.json</code> the browser reads. Add it under
-                    <strong>Plugins → Sources</strong>; it starts untrusted.
-                </p>
-                <div class="p-3.5 bg-[#2b2d31] border border-[#3f4147] rounded-lg">
-                    <pre class="text-xs text-gray-300 font-mono overflow-x-auto">index.json
-my_plugin/
-  plugin.json
-  plugin.py
-
-// index.json
-{
-  "name": "My plugins",
-  "plugins": [
-    { "id": "my_plugin", "name": "My Plugin", "version": "1.0.0",
-      "description": "...", "icon": "🧩", "services": [] }
-  ]
-}</pre>
-                </div>
-            </section>
-
-            <!-- LIMITS -->
-            <section id="limits" class="anchor">
-                <h2 class="text-2xl font-bold text-white mb-3">What plugins may do</h2>
-                <p class="text-sm text-gray-300 leading-relaxed mb-4">
-                    Worth stating plainly, because the API's shape suggests more separation than
-                    actually exists.
-                </p>
-
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div class="bg-[#2b2d31] border border-green-500/30 rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-green-400 mb-2">Actually enforced</h3>
-                        <ul class="text-xs text-gray-300 leading-relaxed list-disc list-inside space-y-1.5">
-                            <li>No access to Docker: the bot container has no socket.</li>
-                            <li><code>config/</code> and <code>plugins/</code> are read-only, so a plugin cannot mark its own source trusted or rewrite another plugin's files.</li>
-                            <li>Sidecars are refused to plugins from untrusted sources.</li>
-                            <li>The AI provider's key is held outside this process; you get generated text, never the credential.</li>
-                            <li>The dashboard's session secret and OAuth client secret are not in the bot container.</li>
-                        </ul>
-                    </div>
-                    <div class="bg-[#2b2d31] border border-amber-500/30 rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-amber-400 mb-2">Not enforced</h3>
-                        <ul class="text-xs text-gray-300 leading-relaxed list-disc list-inside space-y-1.5">
-                            <li>Plugin code runs in the bot's own process. Settings namespacing is a convention, not a barrier — the database can be opened directly.</li>
-                            <li>The Discord bot token is readable, because discord.py holds it to keep the gateway open.</li>
-                            <li>Arbitrary code, files and network access, as the bot's own user.</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <p class="text-sm text-gray-400 leading-relaxed mt-4">
-                    So installing a plugin means trusting its author, the same way installing a package
-                    does. The trust flag decides whether a plugin may additionally run containers; it is
-                    not a sandbox.
-                </p>
-            </section>
-
-            <footer class="pt-6 border-t border-[#3f4147] text-xs text-gray-500">
-                Doppler {{ version }} · Plugin API {{ api_version }}
-            </footer>
-        </main>
     </div>
+
+    <footer class="max-w-6xl mx-auto px-6 py-8 text-center text-[11px] text-gray-600 border-t border-[#2b2d31] mt-8">
+        Doppler {{ version }} · Plugin API {{ api_version }} ·
+        <a href="https://github.com/omka-1337/Doppler-DiscordBot/blob/releases/documentation.md"
+           class="text-gray-500 hover:text-gray-300">source</a>
+    </footer>
+
 </body>
 
 </html>

@@ -28,7 +28,6 @@ from aiohttp import web
 
 from broker import secret_store, sources
 from broker.providers import ai as ai_providers
-from broker.providers import translate as translate_provider
 from dopplerbot.plugins.manifest import PluginManifestError, load_manifest
 
 logging.basicConfig(
@@ -472,9 +471,9 @@ async def handle_uninstall(request):
 # Provider capabilities.
 #
 # The point of doing this here rather than in the bot: the credential is used
-# in this container and never returned. A plugin can ask for a completion or a
-# translation, but the key stays on this side of the boundary -- unlike
-# everything in the bot's process, which plugin code can read.
+# in this container and never returned. A plugin can ask for a completion, but
+# the key stays on this side of the boundary -- unlike everything in the bot's
+# process, which plugin code can read.
 
 async def handle_providers(request):
     return web.json_response({"status": "ok", "providers": secret_store.describe()})
@@ -522,29 +521,6 @@ async def handle_ai_complete(request):
     return web.json_response({"status": "ok", "text": text or ""})
 
 
-async def handle_translate(request):
-    data = await request.json()
-    text = data.get("text", "")
-    target = data.get("target_lang", "en")
-    mode = data.get("mode", translate_provider.PROVIDER_FREE)
-
-    if not text:
-        return web.json_response({"status": "error", "message": "text is required"}, status=400)
-
-    try:
-        result = await translate_provider.translate(text, target, mode, secret_store.get("ai"))
-    except translate_provider.TranslationError as e:
-        return web.json_response({"status": "error", "message": str(e)}, status=502)
-
-    return web.json_response({
-        "status": "ok",
-        "text": result.translated_text,
-        "source_lang": result.source_lang,
-        "target_lang": result.target_lang,
-        "provider": result.provider_used,
-    })
-
-
 def make_app():
     app = web.Application()
     app.router.add_get("/health", handle_health)
@@ -561,7 +537,6 @@ def make_app():
     app.router.add_get("/providers", handle_providers)
     app.router.add_post("/providers", handle_set_provider)
     app.router.add_post("/ai/complete", handle_ai_complete)
-    app.router.add_post("/translate", handle_translate)
     return app
 
 

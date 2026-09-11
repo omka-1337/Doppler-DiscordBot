@@ -36,9 +36,7 @@ import discord
 import httpx
 
 from dopplerbot import ai as core_ai
-from dopplerbot import translate as core_translate
 from dopplerbot.ai import AIError  # re-exported for plugins
-from dopplerbot.translate import TranslationError, TranslationResult  # re-exported for plugins
 from dopplerbot.database import SAVEDATA_DIR, get_settings, get_settings_by_category, set_settings
 from dopplerbot.plugins import endpoints as plugin_endpoints
 from dopplerbot.plugins import trust
@@ -320,31 +318,6 @@ class AIAccess:
         return await core_ai.is_configured()
 
 
-class TranslateAccess:
-    """A plugin's route to translation.
-
-    Exists for the keyless case: ``google_free`` translates with no provider
-    configured and no credential anywhere. ``ai`` is shorthand for asking the
-    bot's configured model, which a plugin holding ``ctx.ai`` can do itself.
-    """
-
-    def __init__(self, log: logging.Logger):
-        self._log = log
-
-    # Backends this broker implements. A plugin that offers the choice to the
-    # operator should declare a setting with exactly these values.
-    MODE_FREE = "google_free"
-    MODE_AI = "ai"
-
-    async def text(self, text: str, target_lang: str, mode: str = MODE_FREE) -> TranslationResult:
-        """Translate into a base language code such as "uk" or "pt-BR".
-
-        `mode` picks the backend: MODE_FREE needs nothing, MODE_AI reuses the
-        bot's configured AI provider. Either way no credential reaches here.
-        """
-        return await core_translate.translate(text, target_lang, mode)
-
-
 class PluginContext:
     """Everything a plugin is handed at load time."""
 
@@ -356,7 +329,6 @@ class PluginContext:
         self.settings = ScopedSettings(manifest.id, schema)
         self.services = ServiceManager(manifest, self.settings, self.log)
         self.ai = AIAccess(self.log)
-        self.translate = TranslateAccess(self.log)
         self._db: PluginDatabase | None = None
         # Registrations tracked so unloading a plugin really removes it -- this
         # is what makes reloading a plugin without restarting the bot work.

@@ -22,8 +22,8 @@ SECRET_FIELDS = {
     "ai": ("gemini_api_key", "deepseek_api_key", "chatgpt_api_key"),
 }
 
-# Translation is absent on purpose: it holds no credential, and which backend to
-# use is the asking plugin's decision, carried on the request.
+# Only the AI provider is here. Anything that needs no credential has no reason
+# to pass through this container at all, and belongs to the plugin that wants it.
 DEFAULTS = {
     "ai": {"provider": "gemini", "gemini_api_key": "", "deepseek_api_key": "", "chatgpt_api_key": ""},
 }

@@ -16,7 +16,7 @@ class VoicePlugin(Plugin):
         ),
         PluginSetting(
             "category_id",
-            SettingType.CHANNEL,
+            SettingType.CATEGORY,
             default=0,
             label="Category ID for new rooms",
             description="The category temporary voice channels are created in.",

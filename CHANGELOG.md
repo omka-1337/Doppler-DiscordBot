@@ -6,6 +6,13 @@ much less often than the bot around it.
 
 ## Unreleased
 
+### Added
+
+- One log file per run, under `logs/`, named for when the run started. The
+  newest 25 are kept and the oldest is dropped beyond that, so a restart no
+  longer overwrites the log that explains why it restarted.
+- A download button on the stats tab for the log currently being streamed.
+
 ### Fixed
 
 - The dashboard's live log stream. `websockets` reached the image only as a

@@ -139,9 +139,14 @@
             <div class="bg-[#2b2d31] p-4 rounded-lg border border-[#3f4147] shadow-lg">
                 <div class="flex items-center justify-between mb-2">
                     <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">{{ t.stats.live_logs }}</h2>
-                    <div class="flex items-center gap-2">
-                        <span id="logsConnDot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                        <span id="logsConnLabel" class="text-[10px] text-gray-400">{{ t.stats.connecting }}</span>
+                    <div class="flex items-center gap-3">
+                        <a href="/api/logs/download" download
+                           class="text-[10px] font-semibold text-gray-400 hover:text-white transition"
+                           title="Download this run's log file">⬇ Download</a>
+                        <span class="flex items-center gap-2">
+                            <span id="logsConnDot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                            <span id="logsConnLabel" class="text-[10px] text-gray-400">{{ t.stats.connecting }}</span>
+                        </span>
                     </div>
                 </div>
                 <div id="logsPanel"

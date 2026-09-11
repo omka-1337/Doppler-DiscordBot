@@ -10,7 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import markdown
@@ -22,6 +22,7 @@ from utils.i18n import get_translations
 from dopplerbot import __version__ as DOPPLER_VERSION
 from dopplerbot.database import get_settings, get_settings_by_category, set_settings
 from dopplerbot.plugins.manifest import CURRENT_API_VERSION
+from dopplerbot import logs as bot_logs
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -42,7 +43,6 @@ if not SESSION_SECRET_KEY:
 app = FastAPI(title="Bot Dashboard")
 
 
-LOG_PATH = BASE_DIR / "latest.log"
 
 # Primes psutil's internal sample so the first /api/stats call already has a
 # meaningful (non-blocking) delta to compare against.
@@ -862,8 +862,8 @@ async def get_stats():
 # ---------------------------------------------------------------------
 
 # LIVE LOG STREAM
-# Tails latest.log (shared with the bot container via the same bind mount)
-# and pushes new lines to the browser over a WebSocket.
+# Tails the bot's current log file (shared through the same bind mount) and
+# pushes new lines to the browser over a WebSocket.
 @app.websocket("/ws/logs")
 async def stream_logs(websocket: WebSocket):
     # AuthMiddleware doesn't run for WebSocket connections, so the same check
@@ -876,30 +876,36 @@ async def stream_logs(websocket: WebSocket):
     await websocket.accept()
 
     try:
+        path = bot_logs.current_log()
         last_size = 0
 
-        if LOG_PATH.exists():
-            with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+        if path is not None and path.exists():
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()[-200:]
             if lines:
                 await websocket.send_text("\n".join(line.rstrip("\n") for line in lines))
-            last_size = LOG_PATH.stat().st_size
+            last_size = path.stat().st_size
 
         while True:
             await asyncio.sleep(1)
 
-            if not LOG_PATH.exists():
+            # Re-resolved every tick: restarting the bot opens a new file, and
+            # the stream has to follow it rather than sit on the finished one.
+            newest = bot_logs.current_log()
+            if newest is None:
+                continue
+            if newest != path:
+                path, last_size = newest, 0
+
+            if not path.exists():
                 continue
 
-            current_size = LOG_PATH.stat().st_size
-
-            # The bot's logging.FileHandler is opened in "w" mode, so a bot
-            # restart truncates the file — treat a shrink as "start over".
+            current_size = path.stat().st_size
             if current_size < last_size:
                 last_size = 0
 
             if current_size > last_size:
-                with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
                     f.seek(last_size)
                     new_content = f.read()
                 last_size = current_size
@@ -910,6 +916,16 @@ async def stream_logs(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
+
+
+# The log the stream is showing, as a file. Downloading beats selecting the
+# panel's text when the point is to attach it to a bug report.
+@app.get("/api/logs/download")
+async def download_log():
+    path = bot_logs.current_log()
+    if path is None or not path.exists():
+        raise HTTPException(status_code=404, detail="No log file yet.")
+    return FileResponse(path, media_type="text/plain", filename=path.name)
 
 # ---------------------------------------------------------------------
 

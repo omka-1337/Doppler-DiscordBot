@@ -5,7 +5,7 @@ __pycache__
 # config (temporary)
 config.py
 pyrefly.toml
-latest.log
+logs/
 .venv
 .vscode
 .env

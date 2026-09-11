@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from aiohttp import web
 from dopplerbot import __version__
+from dopplerbot import logs as bot_logs
 from dopplerbot.database import init_db, get_settings, set_settings, close_db
 from dopplerbot.plugins import PluginRegistry
 from dopplerbot.plugins import endpoints as plugin_endpoints
@@ -20,11 +21,15 @@ load_dotenv()
 STARTED_AT = datetime.now(timezone.utc)
 
 # LOGGING
+# One file per run, named for when the run started, so a restart never buries
+# the log that explains why it restarted. bot_logs.prune() keeps the count down.
+LOG_FILE = bot_logs.start_new_log()
+
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] [%(levelname)s]: %(message)s',
     handlers=[
-        logging.FileHandler('latest.log', mode='w', encoding='utf-8'),
+        logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -541,7 +546,7 @@ async def start_internal_api():
     app.router.add_get("/internal/plugin-page/{plugin_id}", handle_plugin_page)
     app.router.add_route("*", "/internal/plugin/{plugin_id}/{tail:.*}", handle_plugin_endpoint)
     # This API is only polled internally (e.g. every few seconds by the dashboard's
-    # stats tab) — per-request access logs here are just noise in latest.log.
+    # stats tab) — per-request access logs here are just noise in the log file.
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8001)

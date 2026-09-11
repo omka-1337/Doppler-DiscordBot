@@ -702,6 +702,12 @@ async def bot_info():
     return JSONResponse(await get_bot_info())
 
 
+@app.get("/api/guild/options")
+async def guild_options():
+    """Channels, categories and roles of the home guild, for the pickers."""
+    return JSONResponse(await _call_bot("GET", "/internal/guild/options"))
+
+
 @app.get("/api/plugin-pages")
 async def list_plugin_pages():
     return JSONResponse(await _call_bot("GET", "/internal/plugin-pages"))

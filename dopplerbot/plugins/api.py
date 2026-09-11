@@ -64,7 +64,8 @@ class SettingType(str, Enum):
     BOOL = "bool"          # toggle switch
     SELECT = "select"      # dropdown; requires choices
     SLIDER = "slider"      # numeric range; requires min/max
-    CHANNEL = "channel"    # Discord channel id
+    CHANNEL = "channel"    # Discord channel id (text or voice)
+    CATEGORY = "category"  # Discord category id
     ROLE = "role"          # Discord role id
 
 
@@ -107,7 +108,7 @@ class PluginSetting:
         """Turn the stored string into the Python type this setting describes."""
         if self.type is SettingType.BOOL:
             return str(raw).strip().lower() in ("true", "1", "yes", "on")
-        if self.type in (SettingType.INT, SettingType.CHANNEL, SettingType.ROLE):
+        if self.type in (SettingType.INT, SettingType.CHANNEL, SettingType.CATEGORY, SettingType.ROLE):
             try:
                 return int(raw)
             except (TypeError, ValueError):

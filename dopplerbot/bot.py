@@ -390,6 +390,7 @@ async def start_internal_api():
     app.router.add_post("/internal/plugins/install", handle_install_plugin)
     app.router.add_post("/internal/plugins/uninstall", handle_uninstall_plugin)
     app.router.add_get("/internal/plugin-endpoints", handle_list_plugin_endpoints)
+    app.router.add_get("/internal/guild/options", handle_guild_options)
     app.router.add_get("/internal/plugin-pages", handle_list_plugin_pages)
     app.router.add_get("/internal/plugin-page/{plugin_id}", handle_plugin_page)
     app.router.add_route("*", "/internal/plugin/{plugin_id}/{tail:.*}", handle_plugin_endpoint)
@@ -484,6 +485,60 @@ async def bot_info(interaction: discord.Interaction):
         embed.set_thumbnail(url=bot.user.display_avatar.url)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------
+
+# WHAT THE PANEL OFFERS IN A CHANNEL / CATEGORY / ROLE PICKER
+# A settings form that asks for an id makes the operator go hunting in Discord
+# with developer mode on, and accepts a typo without complaint. The bot already
+# knows the guild, so it answers with the actual list.
+async def handle_guild_options(request):
+    guild = None
+    raw_home_id = await get_settings("home_guild_id", "")
+    if raw_home_id:
+        try:
+            guild = bot.get_guild(int(raw_home_id))
+        except ValueError:
+            guild = None
+    if guild is None and bot.guilds:
+        guild = bot.guilds[0]
+
+    if guild is None:
+        return web.json_response(
+            {"status": "error", "message": "The bot is not in a guild yet."}, status=503
+        )
+
+    categories = [{"id": str(c.id), "name": c.name} for c in guild.categories]
+
+    channels = []
+    for channel in guild.channels:
+        if isinstance(channel, discord.CategoryChannel):
+            continue
+        kind = "voice" if isinstance(channel, (discord.VoiceChannel, discord.StageChannel)) else "text"
+        channels.append({
+            "id": str(channel.id),
+            "name": channel.name,
+            "kind": kind,
+            # Grouping by category is what makes a long list readable.
+            "category": str(channel.category.id) if channel.category else "",
+        })
+
+    # @everyone is never a useful answer to "which role?", and a role above the
+    # bot's own cannot be assigned by it anyway.
+    roles = [
+        {"id": str(r.id), "name": r.name}
+        for r in reversed(guild.roles)
+        if not r.is_default()
+    ]
+
+    return web.json_response({
+        "status": "ok",
+        "guild": {"id": str(guild.id), "name": guild.name},
+        "categories": categories,
+        "channels": channels,
+        "roles": roles,
+    })
 
 
 # ---------------------------------------------------------------------

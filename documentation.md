@@ -4,7 +4,7 @@ Reference for writing a Doppler plugin. This file is the reference itself: a
 running dashboard renders it at `/docs/plugins`, with the API version that
 install actually implements shown in the header.
 
-**Plugin API 2.0**
+**Plugin API 2.1**
 
 - [Overview](#overview)
 - [Quick start](#quick-start)
@@ -47,7 +47,7 @@ A complete, working plugin.
     "id": "hello",
     "name": "Hello",
     "version": "1.0.0",
-    "api_version": "2.0",
+    "api_version": "2.1",
     "description": "Replies to /hello.",
     "author": "you",
     "icon": "👋"
@@ -176,6 +176,12 @@ await self.settings.set("channel_id", 123456789)
 Use `hidden=True` for state that should survive a restart but that nobody
 should edit — a "lockdown is currently active" flag, say.
 
+`channel`, `category` and `role` render as dropdowns filled from the guild the
+bot is locked to, so nobody has to turn on developer mode and copy ids. A value
+that no longer exists in the guild stays selected and is labelled as missing,
+rather than being quietly replaced. If the bot cannot be reached the field falls
+back to a plain id box.
+
 ### SettingType
 
 | Type | Renders as |
@@ -188,8 +194,9 @@ should edit — a "lockdown is currently active" flag, say.
 | `bool` | Toggle switch. Coerced to a real `bool` when read. |
 | `select` | Dropdown. Requires `choices=((value, label), ...)`. |
 | `slider` | Range slider. Requires `min` and `max`; `step` defaults to 0.1. |
-| `channel` | Discord channel ID. Read back as an `int`. |
-| `role` | Discord role ID. Read back as an `int`. |
+| `channel` | A channel of the home guild, picked from a list grouped by category. Read back as an `int`. |
+| `category` | A category of the home guild, picked from a list. Read back as an `int`. |
+| `role` | A role of the home guild, picked from a list. Read back as an `int`. |
 
 ## The context
 

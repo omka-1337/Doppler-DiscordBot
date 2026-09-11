@@ -14,6 +14,11 @@ much less often than the bot around it.
 
 ### Added
 
+- Channel, category and role settings are dropdowns of what the guild actually
+  has, instead of boxes for an id copied out of Discord with developer mode on.
+  A value that no longer exists stays selected and is labelled as missing.
+- Plugin API 2.1: a `category` setting type, for plugins that need a category
+  rather than a channel. Plugins targeting 2.0 keep loading unchanged.
 - A model picker in the AI provider settings, filled from the provider itself
   rather than a list written into the dashboard, which would go stale. The model
   was hardcoded per provider until now. Leaving it on "Default" keeps the

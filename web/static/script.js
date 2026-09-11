@@ -370,10 +370,14 @@ function renderPluginField(pluginId, field, value) {
             </div>`;
             break;
 
+        case 'channel':
+        case 'category':
+        case 'role':
+            input = guildPicker(inputId, field, value);
+            break;
+
         case 'int':
         case 'float':
-        case 'channel':
-        case 'role':
             input = `<input type="number" id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="${field.type}"
                 value="${escapeHtml(value)}" ${field.type === 'float' ? 'step="any"' : ''}
                 ${field.min !== null && field.min !== undefined ? `min="${field.min}"` : ''}
@@ -387,6 +391,81 @@ function renderPluginField(pluginId, field, value) {
     }
 
     return `<div>${label}${input}${hint}</div>`;
+}
+
+
+// The home guild's channels, categories and roles. Fetched once per page: the
+// settings forms are rendered synchronously from strings, so this has to be in
+// hand before they are built.
+let guildOptions = null;
+
+async function ensureGuildOptions() {
+    if (guildOptions) return guildOptions;
+    try {
+        const res = await fetch('/api/guild/options');
+        const data = await res.json();
+        guildOptions = (res.ok && data.status === 'ok')
+            ? data
+            : { channels: [], categories: [], roles: [], unavailable: data.detail || data.message || 'unavailable' };
+    } catch (e) {
+        guildOptions = { channels: [], categories: [], roles: [], unavailable: 'Could not reach the bot.' };
+    }
+    return guildOptions;
+}
+
+// An id typed by hand is a chance to get it wrong and no way to notice. These
+// fields become a list of what the guild actually has.
+function guildPicker(inputId, field, value) {
+    const base = 'w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition';
+    const current = String(value ?? '');
+    const attrs = `id="${inputId}" data-key="${escapeHtml(field.key)}" data-type="${field.type}" class="${base}"`;
+
+    // Before the list arrives, or when the bot cannot be reached, the field
+    // stays an id box rather than becoming an empty dropdown that would save
+    // nothing over whatever is already configured.
+    if (!guildOptions || guildOptions.unavailable) {
+        const why = guildOptions && guildOptions.unavailable ? guildOptions.unavailable : '';
+        return `<input type="number" ${attrs.replace(`class="${base}"`, `class="${base} font-mono"`)}
+                    value="${escapeHtml(current)}">
+                ${why ? `<p class="text-[11px] text-amber-400 mt-1">Channel list unavailable (${escapeHtml(why)}) — enter the id.</p>` : ''}`;
+    }
+
+    const chosen = [];
+    let body = '';
+
+    if (field.type === 'role') {
+        body = guildOptions.roles
+            .map(r => `<option value="${r.id}" ${r.id === current ? (chosen.push(1), 'selected') : ''}>@${escapeHtml(r.name)}</option>`)
+            .join('');
+    } else if (field.type === 'category') {
+        body = guildOptions.categories
+            .map(c => `<option value="${c.id}" ${c.id === current ? (chosen.push(1), 'selected') : ''}>${escapeHtml(c.name)}</option>`)
+            .join('');
+    } else {
+        // Channels read far better grouped the way Discord shows them.
+        const groups = guildOptions.categories.map(cat => [cat.name, guildOptions.channels.filter(ch => ch.category === cat.id)]);
+        const loose = guildOptions.channels.filter(ch => !ch.category);
+        if (loose.length) groups.unshift(['No category', loose]);
+
+        body = groups
+            .filter(([, list]) => list.length)
+            .map(([name, list]) => `<optgroup label="${escapeHtml(name)}">` + list
+                .map(ch => `<option value="${ch.id}" ${ch.id === current ? (chosen.push(1), 'selected') : ''}>` +
+                           `${ch.kind === 'voice' ? '🔊 ' : '# '}${escapeHtml(ch.name)}</option>`)
+                .join('') + '</optgroup>')
+            .join('');
+    }
+
+    // A channel that has since been deleted must stay visible and selected,
+    // rather than the form quietly reassigning the setting to whatever is first.
+    const stale = current && current !== '0' && !chosen.length
+        ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} — no longer in the server</option>`
+        : '';
+
+    return `<select ${attrs}>
+        <option value="0" ${!current || current === '0' ? 'selected' : ''}>— none —</option>
+        ${stale}${body}
+    </select>`;
 }
 
 // Which cards are open. Kept across re-renders so toggling or reloading a
@@ -502,6 +581,10 @@ function renderPluginCard(plugin) {
 async function loadPlugins() {
     const list = document.getElementById('pluginsList');
     if (!list) return;
+
+    // The settings forms are built from strings in one pass, so the guild's
+    // channels have to be in hand before that pass starts.
+    await ensureGuildOptions();
 
     try {
         const res = await fetch('/api/plugins');

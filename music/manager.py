@@ -56,6 +56,13 @@ class MusicBotsManager(commands.Cog):
             # stopped, even if an error occurs while one of them is being shut down.
             await asyncio.gather(*tasks, return_exceptions=True)
 
+        # A worker that died without going through stop_music_bot could still
+        # have left a node behind, and nothing else in the bot uses wavelink.
+        try:
+            await wavelink.Pool.close()
+        except Exception as e:
+            logging.warning("Could not close the Lavalink pool: %s", e)
+
 # <==============================> MUSIC BOTS CONTROL IN DASHBOARD <===============================>
 
     # A bulk launch retrieves only active bots from the database,
@@ -198,6 +205,24 @@ class MusicBotsManager(commands.Cog):
 
 # -------------------------------------------------------------------------------
 
+    @staticmethod
+    async def _close_nodes_for(client: discord.Client) -> int:
+        """Close and eject the Lavalink nodes belonging to one worker."""
+        closed = 0
+        for node in list(wavelink.Pool.nodes.values()):
+            if node.client is not client:
+                continue
+            try:
+                # eject=True drops it from the pool, so restarting the worker
+                # builds a fresh node instead of finding a dead one.
+                await node.close(eject=True)
+                closed += 1
+            except Exception as e:
+                logging.warning("Could not close Lavalink node %s: %s", node.identifier, e)
+        return closed
+
+# -------------------------------------------------------------------------------
+
     async def stop_music_bot(self, bot_rowid: int) -> bool:
             bot_instance = self.running_bots.get(bot_rowid)
 
@@ -206,6 +231,12 @@ class MusicBotsManager(commands.Cog):
                 return False
 
             try:
+                # Closing the client is not enough: the worker's Lavalink node
+                # lives in wavelink's global pool and keeps its own reconnect
+                # loop. Left behind, it retries a host that no longer resolves
+                # once the sidecar is gone, forever.
+                await self._close_nodes_for(bot_instance)
+
                 await bot_instance.close()
                 logging.info(f"Music bot {bot_rowid} stopped successfully.")
                 return True

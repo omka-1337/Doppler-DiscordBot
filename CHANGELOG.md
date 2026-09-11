@@ -67,6 +67,8 @@ much less often than the bot around it.
 - One log file per run, under `logs/`, named for when the run started. The
   newest 25 are kept and the oldest is dropped beyond that, so a restart no
   longer overwrites the log that explains why it restarted.
+- Screenshots and a table of contents in the README, which is now split into
+  what the bot does and what the plugins do.
 - A diagnostics report on the stats tab: versions, bot state, every plugin with
   its settings, the AI provider's configuration, running sidecars, and the
   current log, in one file. Secret settings are replaced with their length,

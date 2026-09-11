@@ -19,6 +19,9 @@ logs/
 # Secrets (never baked into an image layer)
 .env
 
+# Screenshots for the README; never needed in an image.
+docs
+
 # Python cache
 __pycache__
 *.pyc

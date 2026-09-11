@@ -4,6 +4,19 @@
 
 Doppler is a self-hosted, open-source Discord bot with a web dashboard for configuration — no code editing or redeploys needed for day-to-day settings changes.
 
+![The dashboard's stats tab: bot status, host load and the log as it is written](docs/stats-page.png)
+
+## Contents
+
+- [What Doppler is](#what-doppler-is) — [the bot](#the-bot) · [available plugins](#available-plugins)
+- [Plugins](#plugins) — [provider credentials](#provider-credentials) · [sources and trust](#sources-and-trust) · [sidecar containers](#sidecar-containers)
+- [Requirements](#requirements)
+- [Quick start (Docker)](#quick-start-docker)
+- [Configuration](#configuration)
+- [Common commands](#common-commands)
+- [Writing a plugin](documentation.md) — the API reference
+- [Changelog](CHANGELOG.md)
+
 ## What Doppler is
 
 **Doppler ships empty.** The bot itself hosts plugins and little else: everything
@@ -51,6 +64,8 @@ A plugin from a trusted source can also add its own tab to the dashboard, which
 is how the music and embed pages get there.
 
 ## Plugins
+
+![The plugins tab: each installed plugin with its version, state, settings and a reload button](docs/plugins-page.png)
 
 A plugin is a self-contained folder holding a `plugin.json` manifest and its Python code. Installed plugins land in `plugins/` at the repo root, which the broker writes, the bot only reads, and git ignores — so they survive an image rebuild and never end up in your commits.
 

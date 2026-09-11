@@ -584,6 +584,13 @@ async def get_providers():
     return JSONResponse(await _call_broker("GET", "/providers"))
 
 
+@app.get("/api/providers/models")
+async def get_provider_models(provider: str = ""):
+    """What the selected provider currently offers, asked of the provider."""
+    path = f"/ai/models?provider={provider}" if provider else "/ai/models"
+    return JSONResponse(await _call_broker("GET", path))
+
+
 @app.post("/api/providers")
 async def set_providers(payload: ProviderPayload):
     return JSONResponse(await _call_broker(

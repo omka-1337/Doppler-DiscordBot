@@ -12,6 +12,13 @@ much less often than the bot around it.
   with a short guide under it on where that key comes from. Three fields when
   two can never apply was three chances to fill in the wrong one.
 
+### Added
+
+- A model picker in the AI provider settings, filled from the provider itself
+  rather than a list written into the dashboard, which would go stale. The model
+  was hardcoded per provider until now. Leaving it on "Default" keeps the
+  previous behaviour.
+
 ### Fixed
 
 - Importing the bot module no longer starts a log file of its own. Any tool that

@@ -25,7 +25,13 @@ SECRET_FIELDS = {
 # Only the AI provider is here. Anything that needs no credential has no reason
 # to pass through this container at all, and belongs to the plugin that wants it.
 DEFAULTS = {
-    "ai": {"provider": "gemini", "gemini_api_key": "", "deepseek_api_key": "", "chatgpt_api_key": ""},
+    # An empty model means "whatever the provider module defaults to", so an
+    # install that never picks one keeps working.
+    "ai": {
+        "provider": "gemini",
+        "gemini_api_key": "", "deepseek_api_key": "", "chatgpt_api_key": "",
+        "gemini_model": "", "deepseek_model": "", "chatgpt_model": "",
+    },
 }
 
 

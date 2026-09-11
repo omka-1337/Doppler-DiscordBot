@@ -503,6 +503,7 @@ async def handle_ai_complete(request):
     config = secret_store.get("ai")
     provider_name = config.get("provider", "gemini")
     api_key = config.get(f"{provider_name}_api_key", "")
+    model = config.get(f"{provider_name}_model", "")
 
     if not api_key:
         return web.json_response(
@@ -511,7 +512,7 @@ async def handle_ai_complete(request):
 
     provider = ai_providers.PROVIDERS.get(provider_name, ai_providers.gemini)
     try:
-        text = await provider.generate_reply(system_prompt, prompt, api_key)
+        text = await provider.generate_reply(system_prompt, prompt, api_key, model)
     except Exception as e:
         log.error("%s request failed: %s", provider_name, e)
         return web.json_response(
@@ -519,6 +520,45 @@ async def handle_ai_complete(request):
         )
 
     return web.json_response({"status": "ok", "text": text or ""})
+
+
+async def handle_ai_models(request):
+    """Models the configured key may use, asked of the provider itself.
+
+    A hardcoded list would be stale within a release; the provider always knows
+    what it currently offers, and answering at all proves the key works.
+    """
+    config = secret_store.get("ai")
+    provider_name = request.query.get("provider") or config.get("provider", "gemini")
+
+    provider = ai_providers.PROVIDERS.get(provider_name)
+    if provider is None:
+        return web.json_response(
+            {"status": "error", "message": f"Unknown provider {provider_name!r}."}, status=400
+        )
+
+    api_key = config.get(f"{provider_name}_api_key", "")
+    if not api_key:
+        return web.json_response(
+            {"status": "error", "message": f"No API key is configured for {provider_name}."}, status=400
+        )
+
+    try:
+        models = await provider.list_models(api_key)
+    except Exception as e:
+        log.error("Could not list %s models: %s", provider_name, e)
+        return web.json_response(
+            {"status": "error", "message": f"{provider_name} would not list its models: {e}"},
+            status=502,
+        )
+
+    return web.json_response({
+        "status": "ok",
+        "provider": provider_name,
+        "models": models,
+        "default": getattr(provider, "DEFAULT_MODEL", ""),
+        "selected": config.get(f"{provider_name}_model", ""),
+    })
 
 
 def make_app():
@@ -537,6 +577,7 @@ def make_app():
     app.router.add_get("/providers", handle_providers)
     app.router.add_post("/providers", handle_set_provider)
     app.router.add_post("/ai/complete", handle_ai_complete)
+    app.router.add_get("/ai/models", handle_ai_models)
     return app
 
 

@@ -876,6 +876,7 @@ const PROVIDER_SECTIONS = [
         providers: [
             {
                 id: 'gemini',
+                modelKey: 'gemini_model',
                 label: 'Google Gemini',
                 key: 'gemini_api_key',
                 keyLabel: 'Gemini API key',
@@ -890,6 +891,7 @@ const PROVIDER_SECTIONS = [
             },
             {
                 id: 'deepseek',
+                modelKey: 'deepseek_model',
                 label: 'DeepSeek',
                 key: 'deepseek_api_key',
                 keyLabel: 'DeepSeek API key',
@@ -904,6 +906,7 @@ const PROVIDER_SECTIONS = [
             },
             {
                 id: 'chatgpt',
+                modelKey: 'chatgpt_model',
                 label: 'ChatGPT',
                 key: 'chatgpt_api_key',
                 keyLabel: 'OpenAI API key',
@@ -945,6 +948,54 @@ function providerGuide(provider) {
         </details>`;
 }
 
+
+// The list comes from the provider itself rather than being hardcoded here: a
+// list written into the dashboard would be out of date within a release.
+async function loadProviderModels(section, providerId) {
+    const select = document.getElementById(`prov_${section}_model`);
+    const note = document.getElementById(`prov_${section}_model_note`);
+    if (!select) return;
+
+    const spec = PROVIDER_SECTIONS.find(s => s.section === section);
+    const provider = spec && spec.providers.find(p => p.id === providerId);
+    const stored = provider ? ((providerState[section] || {})[provider.modelKey] || '') : '';
+
+    const fail = (message) => {
+        select.innerHTML = `<option value="${escapeHtml(stored)}">${escapeHtml(stored || 'unavailable')}</option>`;
+        select.disabled = true;
+        note.textContent = message;
+        note.className = 'text-[11px] text-amber-400 mt-1';
+    };
+
+    try {
+        const res = await fetch(`/api/providers/models?provider=${encodeURIComponent(providerId)}`);
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') {
+            fail(data.detail || data.message || 'Could not list the models.');
+            return;
+        }
+
+        const models = data.models || [];
+        // A model that is set but no longer listed still works often enough --
+        // deepseek-chat is not in DeepSeek's own listing yet answers fine. It
+        // stays selectable rather than being silently swapped out.
+        const options = models.slice();
+        if (stored && !options.includes(stored)) options.unshift(stored);
+
+        select.disabled = false;
+        select.innerHTML =
+            `<option value="">Default (${escapeHtml(data.default || 'provider default')})</option>` +
+            options.map(m =>
+                `<option value="${escapeHtml(m)}" ${m === stored ? 'selected' : ''}>${escapeHtml(m)}` +
+                `${m === stored && !models.includes(m) ? ' — not listed' : ''}</option>`).join('');
+
+        note.textContent = `${models.length} model(s) offered by this key.`;
+        note.className = 'text-[11px] text-gray-500 mt-1';
+    } catch (e) {
+        fail('Error connecting to the server.');
+    }
+}
+
 function renderProviderSection(spec, state, currentId) {
     const configured = (state && state.configured) || {};
     const current = currentId || (state && state.provider) || spec.providers[0].id;
@@ -972,6 +1023,14 @@ function renderProviderSection(spec, state, currentId) {
                 class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
                 ${options}
             </select>
+        </div>
+        <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Model</label>
+            <select id="prov_${spec.section}_model"
+                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+                <option value="">Loading...</option>
+            </select>
+            <p id="prov_${spec.section}_model_note" class="text-[11px] text-gray-400 mt-1"></p>
         </div>
         <div>
             <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">
@@ -1004,6 +1063,10 @@ function switchProvider(section) {
     host.innerHTML = PROVIDER_SECTIONS
         .map(s => renderProviderSection(s, providerState[s.section], s.section === section ? chosen : null))
         .join('');
+    PROVIDER_SECTIONS.forEach(s => {
+        const sel = document.getElementById(`prov_${s.section}_provider`);
+        if (sel) loadProviderModels(s.section, sel.value);
+    });
 }
 
 async function loadProviders() {
@@ -1021,6 +1084,10 @@ async function loadProviders() {
         host.innerHTML = PROVIDER_SECTIONS
             .map(spec => renderProviderSection(spec, providerState[spec.section]))
             .join('');
+        PROVIDER_SECTIONS.forEach(spec => {
+            const chosen = document.getElementById(`prov_${spec.section}_provider`);
+            if (chosen) loadProviderModels(spec.section, chosen.value);
+        });
     } catch (e) {
         host.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
     }
@@ -1039,6 +1106,11 @@ async function saveProviders(section) {
     // providers not shown are left untouched for the same reason.
     const field = document.getElementById(`prov_${section}_key`);
     if (field && field.value.trim()) values[provider.key] = field.value.trim();
+
+    // Always sent, including empty, because empty is a real choice here: it
+    // means "use whatever the provider module defaults to".
+    const modelField = document.getElementById(`prov_${section}_model`);
+    if (modelField && !modelField.disabled) values[provider.modelKey] = modelField.value;
 
     try {
         const res = await fetch('/api/providers', {

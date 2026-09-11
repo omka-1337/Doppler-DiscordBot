@@ -6,6 +6,12 @@ much less often than the bot around it.
 
 ## Unreleased
 
+### Changed
+
+- The AI provider settings show the key field for the selected provider only,
+  with a short guide under it on where that key comes from. Three fields when
+  two can never apply was three chances to fill in the wrong one.
+
 ### Fixed
 
 - Importing the bot module no longer starts a log file of its own. Any tool that

@@ -869,53 +869,141 @@ const PROVIDER_SECTIONS = [
     {
         section: 'ai',
         title: 'AI chat',
-        choices: [['gemini', 'Google Gemini'], ['deepseek', 'DeepSeek'], ['chatgpt', 'ChatGPT']],
-        keys: [
-            ['gemini_api_key', 'Gemini API key'],
-            ['deepseek_api_key', 'DeepSeek API key'],
-            ['chatgpt_api_key', 'ChatGPT API key'],
+        // One entry per provider: the key it needs, and where that key comes
+        // from. Only the selected provider's field is shown -- three boxes when
+        // two of them can never apply is just three chances to fill in the
+        // wrong one.
+        providers: [
+            {
+                id: 'gemini',
+                label: 'Google Gemini',
+                key: 'gemini_api_key',
+                keyLabel: 'Gemini API key',
+                url: 'https://aistudio.google.com/apikey',
+                site: 'Google AI Studio',
+                steps: [
+                    'Sign in with a Google account.',
+                    'Open Google AI Studio and choose "Get API key".',
+                    'Create a key in a new or existing project, then copy it.',
+                ],
+                note: 'Has a free tier, capped at a small number of requests per day.',
+            },
+            {
+                id: 'deepseek',
+                label: 'DeepSeek',
+                key: 'deepseek_api_key',
+                keyLabel: 'DeepSeek API key',
+                url: 'https://platform.deepseek.com/api_keys',
+                site: 'the DeepSeek platform',
+                steps: [
+                    'Create an account and sign in.',
+                    'Open API keys and create one. It is shown once, so copy it now.',
+                    'Top the balance up: requests fail without credit.',
+                ],
+                note: 'Paid only. There is no free tier.',
+            },
+            {
+                id: 'chatgpt',
+                label: 'ChatGPT',
+                key: 'chatgpt_api_key',
+                keyLabel: 'OpenAI API key',
+                url: 'https://platform.openai.com/api-keys',
+                site: 'the OpenAI platform',
+                steps: [
+                    'Create an account and sign in.',
+                    'Add a payment method under Billing.',
+                    'Open API keys, create a secret key and copy it. It is shown once.',
+                ],
+                note: 'Paid only. An account without billing set up returns quota errors.',
+            },
         ],
     },
 ];
 
-function renderProviderSection(spec, state) {
-    const configured = (state && state.configured) || {};
-    const current = (state && state.provider) || spec.choices[0][0];
+// The last payload from /api/providers, so changing the dropdown can redraw the
+// section without asking the broker again.
+let providerState = {};
 
-    const options = spec.choices
-        .map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+function providerGuide(provider) {
+    const steps = provider.steps
+        .map(step => `<li>${escapeHtml(step)}</li>`)
         .join('');
 
-    const keys = spec.keys.map(([key, label]) => `
-        <div>
-            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">
-                ${escapeHtml(label)}
-                ${configured[key]
-                    ? '<span class="text-[10px] text-green-400 font-semibold ml-1">✓ set</span>'
-                    : '<span class="text-[10px] text-gray-500 font-semibold ml-1">not set</span>'}
-            </label>
-            <input type="password" id="prov_${spec.section}_${key}" autocomplete="off"
-                placeholder="${configured[key] ? 'Saved — type to replace' : 'Not set'}"
-                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
-        </div>`).join('');
+    return `
+        <details class="mt-2 group">
+            <summary class="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer select-none font-semibold">
+                Where do I get an API key?
+            </summary>
+            <div class="mt-2 p-3 bg-[#1e1f22] border border-[#3f4147] rounded-lg space-y-2">
+                <ol class="list-decimal list-inside space-y-1 text-[11px] text-gray-300">${steps}</ol>
+                <p class="text-[11px] text-gray-400">${escapeHtml(provider.note)}</p>
+                <a href="${escapeHtml(provider.url)}" target="_blank" rel="noopener noreferrer"
+                   class="inline-block text-[11px] font-semibold text-indigo-400 hover:text-indigo-300">
+                    Open ${escapeHtml(provider.site)} ↗
+                </a>
+            </div>
+        </details>`;
+}
+
+function renderProviderSection(spec, state, currentId) {
+    const configured = (state && state.configured) || {};
+    const current = currentId || (state && state.provider) || spec.providers[0].id;
+    const provider = spec.providers.find(p => p.id === current) || spec.providers[0];
+
+    const options = spec.providers
+        .map(p => `<option value="${p.id}" ${provider.id === p.id ? 'selected' : ''}>${escapeHtml(p.label)}</option>`)
+        .join('');
+
+    // Keys for the other providers stay stored; saying so stops the next switch
+    // looking like the key was lost.
+    const others = spec.providers
+        .filter(p => p.id !== provider.id && configured[p.key])
+        .map(p => p.label);
+    const otherNote = others.length
+        ? `<p class="text-[11px] text-gray-500">Also stored: ${escapeHtml(others.join(', '))}.</p>`
+        : '';
 
     return `
     <div class="space-y-4 pb-5 border-b border-[#3f4147] last:border-0">
         <h4 class="text-sm font-bold text-white">${escapeHtml(spec.title)}</h4>
         <div>
             <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">Provider</label>
-            <select id="prov_${spec.section}_provider"
+            <select id="prov_${spec.section}_provider" onchange="switchProvider('${spec.section}')"
                 class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
                 ${options}
             </select>
-            ${spec.hint ? `<p class="text-[11px] text-gray-400 mt-1">${escapeHtml(spec.hint)}</p>` : ''}
         </div>
-        ${keys}
+        <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5">
+                ${escapeHtml(provider.keyLabel)}
+                ${configured[provider.key]
+                    ? '<span class="text-[10px] text-green-400 font-semibold ml-1">✓ set</span>'
+                    : '<span class="text-[10px] text-gray-500 font-semibold ml-1">not set</span>'}
+            </label>
+            <input type="password" id="prov_${spec.section}_key" autocomplete="off"
+                placeholder="${configured[provider.key] ? 'Saved — type to replace' : 'Not set'}"
+                class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg p-2.5 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition">
+            ${providerGuide(provider)}
+        </div>
+        ${otherNote}
         <button onclick="saveProviders('${spec.section}')"
             class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded transition shadow-md text-sm">
             💾 Save
         </button>
     </div>`;
+}
+
+// Redraw one section for the provider now selected, keeping anything already
+// typed into the key field.
+function switchProvider(section) {
+    const spec = PROVIDER_SECTIONS.find(s => s.section === section);
+    const host = document.getElementById('providersForm');
+    if (!spec || !host) return;
+
+    const chosen = document.getElementById(`prov_${section}_provider`).value;
+    host.innerHTML = PROVIDER_SECTIONS
+        .map(s => renderProviderSection(s, providerState[s.section], s.section === section ? chosen : null))
+        .join('');
 }
 
 async function loadProviders() {
@@ -929,8 +1017,9 @@ async function loadProviders() {
             host.innerHTML = `<p class="text-xs text-red-400">${escapeHtml(data.detail || 'Could not reach the broker.')}</p>`;
             return;
         }
+        providerState = data.providers || {};
         host.innerHTML = PROVIDER_SECTIONS
-            .map(spec => renderProviderSection(spec, (data.providers || {})[spec.section]))
+            .map(spec => renderProviderSection(spec, providerState[spec.section]))
             .join('');
     } catch (e) {
         host.innerHTML = '<p class="text-xs text-red-400">Error connecting to the server.</p>';
@@ -941,13 +1030,15 @@ async function saveProviders(section) {
     const spec = PROVIDER_SECTIONS.find(s => s.section === section);
     if (!spec) return;
 
-    const values = { provider: document.getElementById(`prov_${section}_provider`).value };
+    const chosen = document.getElementById(`prov_${section}_provider`).value;
+    const provider = spec.providers.find(p => p.id === chosen) || spec.providers[0];
+    const values = { provider: provider.id };
+
     // An empty field means "keep whatever is stored", so a saved key survives
-    // saving the form without retyping it.
-    spec.keys.forEach(([key]) => {
-        const el = document.getElementById(`prov_${section}_${key}`);
-        if (el && el.value.trim()) values[key] = el.value.trim();
-    });
+    // saving the form without retyping it -- and the keys belonging to the
+    // providers not shown are left untouched for the same reason.
+    const field = document.getElementById(`prov_${section}_key`);
+    if (field && field.value.trim()) values[provider.key] = field.value.trim();
 
     try {
         const res = await fetch('/api/providers', {

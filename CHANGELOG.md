@@ -19,6 +19,13 @@ much less often than the bot around it.
   was hardcoded per provider until now. Leaving it on "Default" keeps the
   previous behaviour.
 
+### Changed
+
+- DeepSeek's default model is now `deepseek-flash`, which is what DeepSeek
+  documents and currently resolves to V4.1-Flash. The old default,
+  `deepseek-chat`, is absent from their own model listing, so there was no way
+  to tell what it resolved to.
+
 ### Fixed
 
 - Importing the bot module no longer starts a log file of its own. Any tool that

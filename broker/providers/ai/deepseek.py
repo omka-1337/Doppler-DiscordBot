@@ -4,7 +4,11 @@ PROVIDER_NAME = "deepseek"
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODELS_URL = "https://api.deepseek.com/models"
 
-DEFAULT_MODEL = "deepseek-chat"
+# DeepSeek's own name for its current Flash model. It is a moving alias --
+# today it is V4.1-Flash -- which is what we want from a default. The previous
+# default, "deepseek-chat", is undocumented and absent from their listing, so
+# there was no way to tell what it actually resolved to.
+DEFAULT_MODEL = "deepseek-flash"
 
 
 async def generate_reply(system_prompt: str, prompt: str, api_key: str, model: str = "") -> str:

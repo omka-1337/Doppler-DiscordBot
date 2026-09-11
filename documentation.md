@@ -221,20 +221,6 @@ if await self.ctx.ai.is_configured():
     reply = await self.ctx.ai.complete("You are terse.", "Say hello.")
 ```
 
-### `ctx.translate`
-
-Translation that works with nothing configured. The default `google_free` mode
-needs no provider and no key at all, which is the only reason this exists
-separately from `ctx.ai` — if your plugin already requires AI, prompt `ctx.ai`
-yourself rather than going through here. `mode="ai"` is a shorthand that does
-exactly that. Raises `TranslationError`.
-
-```python
-result = await self.ctx.translate.text("Good morning", "uk")
-result = await self.ctx.translate.text("Good morning", "uk", mode="ai")
-result.text, result.source_lang, result.provider
-```
-
 ### `ctx.services`
 
 Start and address a sidecar container you declared in the manifest. See
@@ -401,8 +387,8 @@ actually exists.
 - `config/` and `plugins/` are read-only, so a plugin cannot mark its own source
   trusted or rewrite another plugin's files.
 - Sidecars are refused to plugins from untrusted sources.
-- AI and translation keys are held outside this process; you get results, never
-  credentials.
+- The AI provider's key is held outside this process; you get generated text,
+  never the credential.
 - The dashboard's session secret and OAuth client secret are not in the bot
   container.
 

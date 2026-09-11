@@ -302,21 +302,6 @@ one    = await self.ctx.db.fetchone("SELECT * FROM notes WHERE id = ?", (row_id,
                     </div>
 
                     <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
-                        <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.translate</h3>
-                        <p class="text-xs text-gray-400 leading-relaxed mb-2">
-                            Translation that works with nothing configured. The default
-                            <code>google_free</code> mode needs no provider and no key at all, which is
-                            the only reason this exists separately from <code>ctx.ai</code> — if your
-                            plugin already requires AI, prompt <code>ctx.ai</code> yourself rather than
-                            going through here. <code>mode="ai"</code> is a shorthand that does exactly
-                            that. Raises <code>TranslationError</code>.
-                        </p>
-                        <pre class="text-xs text-gray-300 font-mono overflow-x-auto bg-[#1e1f22] p-2.5 rounded border border-[#3f4147]">result = await self.ctx.translate.text("Good morning", "uk")
-result = await self.ctx.translate.text("Good morning", "uk", mode="ai")
-result.text, result.source_lang, result.provider</pre>
-                    </div>
-
-                    <div class="bg-[#2b2d31] border border-[#3f4147] rounded-lg p-4">
                         <h3 class="text-sm font-bold text-white mb-1.5 font-mono">ctx.services</h3>
                         <p class="text-xs text-gray-400 leading-relaxed">
                             <code>start(name)</code>, <code>stop(name=None)</code>,
@@ -505,7 +490,7 @@ my_plugin/
                             <li>No access to Docker: the bot container has no socket.</li>
                             <li><code>config/</code> and <code>plugins/</code> are read-only, so a plugin cannot mark its own source trusted or rewrite another plugin's files.</li>
                             <li>Sidecars are refused to plugins from untrusted sources.</li>
-                            <li>AI and translation keys are held outside this process; you get results, never credentials.</li>
+                            <li>The AI provider's key is held outside this process; you get generated text, never the credential.</li>
                             <li>The dashboard's session secret and OAuth client secret are not in the bot container.</li>
                         </ul>
                     </div>

@@ -36,8 +36,12 @@ Plugin API 1.1.
 
 ### Removed
 
-- `deepl` and `google-cloud-translate` from requirements; nothing has imported
-  them since the translation providers were dropped.
+- `deepl`, `google-cloud-translate`, `google-genai` and `deep-translator` from
+  the bot image's requirements. Nothing there imports them — the provider SDKs
+  belong to the broker, which lists them itself.
+- `ctx.translate` is gone from the documentation. It is a translation-shaped
+  hole in a general API, kept for one plugin; the call still works in 0.2.0 but
+  is no longer part of the documented surface.
 - The undocumented `tab` field in a manifest's `page` block. It never had a
   working dashboard implementation and its handler had been deleted.
 

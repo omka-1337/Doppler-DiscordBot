@@ -4,7 +4,7 @@ Doppler's own version. The plugin API is versioned separately — a plugin
 declares the API it targets in its `plugin.json`, and that contract changes
 much less often than the bot around it.
 
-## Unreleased
+## 0.4.0 — 2026-09-11
 
 ### Added
 

@@ -144,6 +144,24 @@ class MusicBotsManager(commands.Cog):
             if isinstance(player, MusicPlayer):
                 await player.play_next()
 
+        # A track that cannot be played raises this first, and only then ends with
+        # reason "loadFailed". Listening to the end alone meant the queue moved on
+        # with nothing said, and with looping on it retried the same track forever.
+        @sub_bot.event
+        async def on_wavelink_track_exception(payload: wavelink.TrackExceptionEventPayload):
+            player = payload.player
+            if isinstance(player, MusicPlayer):
+                exception = getattr(payload, "exception", None) or {}
+                reason = exception.get("message") if isinstance(exception, dict) else str(exception)
+                await player.report_failure(payload.track, reason)
+
+        # Lavalink stopped receiving audio for a track it had started.
+        @sub_bot.event
+        async def on_wavelink_track_stuck(payload: wavelink.TrackStuckEventPayload):
+            player = payload.player
+            if isinstance(player, MusicPlayer):
+                await player.report_failure(payload.track, "The source stopped responding.")
+
         @sub_bot.event
         async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
             # This event responds to a change in any user's voice status, causing the bot to leave the channel if no one else is left in it.

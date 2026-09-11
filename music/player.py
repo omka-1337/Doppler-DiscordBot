@@ -33,6 +33,10 @@ class MusicPlayer(wavelink.Player):
         # cancelled if someone manages to add a new track before it expires.
         self.inactivity_task: asyncio.Task | None = None
 
+        # Set when the current track failed to play. Without it, loop=True would
+        # replay the track that just failed, fail again, and never stop.
+        self.current_track_failed: bool = False
+
 # -------------------------------------------------------------------------------
 
     async def add_to_queue(self, track: wavelink.Playable):
@@ -101,10 +105,43 @@ class MusicPlayer(wavelink.Player):
 
 # -------------------------------------------------------------------------------
 
+    # Lavalink explains why a track would not play -- "This video requires login",
+    # "No supported audio streams available". Swallowing that leaves the operator
+    # watching the queue drain in silence, so the first line of it is passed on.
+    async def report_failure(self, track: wavelink.Playable | None, reason: str | None):
+        self.current_track_failed = True
+
+        title = track.title if track is not None else "the track"
+        logging.warning("Playback failed for %r: %s", title, reason or "no reason given")
+
+        if self.text_channel is None:
+            return
+
+        detail = (reason or "").strip().splitlines()[0] if reason else ""
+        if len(detail) > 300:
+            detail = detail[:297] + "..."
+
+        text = f"⚠️ Could not play **{discord.utils.escape_markdown(title)}**"
+        if detail:
+            text += f"\n`{detail}`"
+
+        try:
+            await self.text_channel.send(text)
+        except discord.HTTPException as e:
+            logging.warning("Could not report the failure in the channel: %s", e)
+
+# -------------------------------------------------------------------------------
+
     async def play_next(self):
+        # A track that could not be played is never a candidate for looping: the
+        # next attempt would fail the same way, forever. The loop setting itself
+        # is left alone, so the track after this one still repeats if asked to.
+        failed = self.current_track_failed
+        self.current_track_failed = False
+
         # When looping is enabled (loop=True), the same track as current_track is played without changing the queue.
         # To move to the next audio track, the Skip button must reset current_track before forcing the skip, so that "loop" does not start playing it again.
-        if self.loop and self.current_track is not None:
+        if self.loop and self.current_track is not None and not failed:
             await self.play(self.current_track)
             logging.info(f"Looping: {self.current_track.title}")
             await self.send_now_playing(self.current_track)

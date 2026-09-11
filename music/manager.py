@@ -216,6 +216,14 @@ class MusicBotsManager(commands.Cog):
                 # eject=True drops it from the pool, so restarting the worker
                 # builds a fresh node instead of finding a dead one.
                 await node.close(eject=True)
+
+                # close() leaves the node's aiohttp session open, which aiohttp
+                # then complains about -- one leaked session per worker, every
+                # time the plugin is switched off.
+                session = getattr(node, "_session", None)
+                if session is not None and not session.closed:
+                    await session.close()
+
                 closed += 1
             except Exception as e:
                 logging.warning("Could not close Lavalink node %s: %s", node.identifier, e)

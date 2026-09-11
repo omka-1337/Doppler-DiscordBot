@@ -17,6 +17,10 @@ much less often than the bot around it.
   already applied. The sync now runs in the background.
 - The plugin API sidebar lists the reference's sections again, instead of the
   document title alone.
+- Delete on an embed template did nothing. A plugin page's frame lacked
+  `allow-modals`, which makes `confirm()` return false without asking and
+  `alert()` do nothing, so the page's confirmation could never be answered and
+  its errors were invisible.
 
 ## 0.3.0 — 2026-09-11
 

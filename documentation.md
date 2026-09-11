@@ -272,10 +272,15 @@ when the plugin starts and disappears when it stops.
 }
 ```
 
-The file is served into an iframe with `sandbox="allow-scripts"` and no
-`allow-same-origin`, so the page runs on an opaque origin. It cannot read the
-dashboard's cookies, its DOM, or any dashboard route. Everything it needs comes
-through `window.doppler`, injected ahead of your own markup.
+The file is served into an iframe with `sandbox="allow-scripts allow-modals"`
+and no `allow-same-origin`, so the page runs on an opaque origin. It cannot read
+the dashboard's cookies, its DOM, or any dashboard route. Everything it needs
+comes through `window.doppler`, injected ahead of your own markup.
+
+`confirm()`, `alert()` and `prompt()` work. Most other things a page cannot do
+fail loudly, but these three are the exception worth knowing: without
+`allow-modals` a browser makes `confirm()` return `false` and `alert()` do
+nothing, with no error either way.
 
 ### `doppler.call(method, path, body)`
 

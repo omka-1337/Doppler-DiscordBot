@@ -1386,7 +1386,10 @@ async function openPluginPage(pane) {
         const frame = document.createElement('iframe');
         frame.className = 'w-full rounded-lg border border-[#3f4147] bg-[#2b2d31]';
         frame.style.height = '78vh';
-        frame.setAttribute('sandbox', 'allow-scripts');
+        // allow-modals as well: without it confirm() silently returns false and
+        // alert() does nothing, so a page's "are you sure?" never opens and its
+        // error reporting disappears. Pages come from trusted sources only.
+        frame.setAttribute('sandbox', 'allow-scripts allow-modals');
         frame.srcdoc = PLUGIN_PAGE_SHIM + data.html;
 
         pane.innerHTML = '';

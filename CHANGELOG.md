@@ -6,6 +6,12 @@ much less often than the bot around it.
 
 ## Unreleased
 
+### Fixed
+
+- Importing the bot module no longer starts a log file of its own. Any tool that
+  imported it to reach a helper opened a run log and could prune a real one out
+  of the way; logging is set up when the bot actually runs.
+
 ### Changed
 
 - Music moved out of the dashboard and into the plugin's own page, the way the

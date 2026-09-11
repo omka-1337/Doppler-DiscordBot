@@ -23,16 +23,19 @@ STARTED_AT = datetime.now(timezone.utc)
 # LOGGING
 # One file per run, named for when the run started, so a restart never buries
 # the log that explains why it restarted. bot_logs.prune() keeps the count down.
-LOG_FILE = bot_logs.start_new_log()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s]: %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+#
+# Deliberately not at import time: tooling that imports this module to reach a
+# helper would otherwise start a log of its own and prune a real run's out of
+# the way. Only actually running the bot should open one.
+def setup_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[%(asctime)s] [%(levelname)s]: %(message)s',
+        handlers=[
+            logging.FileHandler(bot_logs.start_new_log(), mode='a', encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -602,6 +605,7 @@ async def main():
         logging.info(f"DB connection succecfuly closed.")
 
 if __name__ == "__main__":
+    setup_logging()
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):

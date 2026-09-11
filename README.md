@@ -1,6 +1,6 @@
 # Doppler
 
-**Version 0.1.0** · [Changelog](CHANGELOG.md) · Plugin API 1.0
+**Version 0.2.0** · [Changelog](CHANGELOG.md) · [Plugin API 1.1](documentation.md)
 
 Doppler is a self-hosted, open-source Discord bot with a web dashboard for configuration — no code editing or redeploys needed for day-to-day settings changes.
 
@@ -18,6 +18,8 @@ Doppler is a self-hosted, open-source Discord bot with a web dashboard for confi
 - 🔐 **Dashboard Login** — the dashboard is behind "Login with Discord"; only the home server's owner or an Administrator there gets in. It is set up during first run rather than being optional, so a fresh install is never briefly open. The Client ID is detected automatically, and both the setup and login pages show the exact redirect URI to register.
 
 **Doppler ships empty.** Every feature above is a plugin, installed from the dashboard's **Plugins → Browse** tab and then enabled, configured and reloaded from **Plugins → Installed**. The official plugins live on this repository's [`doppler/plugins`](../../tree/doppler/plugins) branch, which is configured as a trusted source out of the box.
+
+The bot keeps one command of its own: `/bot-info` reports the bot version, the plugin API version and every running plugin with its own version. Everything else comes from plugins.
 
 ## Plugins
 
@@ -54,6 +56,8 @@ A plugin declares its settings in code and the dashboard generates the form from
 That last point is a namespace boundary, not a sandbox — a plugin is Python running in the bot's own process. **Installing a third-party plugin means running third-party code**, so only install plugins you trust.
 
 Cogs and persistent views registered through `self.ctx` are removed automatically when the plugin is unloaded, which is what makes the dashboard's **Reload** button able to swap a plugin's code in place while the bot stays connected.
+
+The full reference is in [documentation.md](documentation.md); a running dashboard serves the same thing at **/docs/plugins**, filled in with the API version that install implements.
 
 ### Provider credentials
 

@@ -4,7 +4,7 @@ Doppler's own version. The plugin API is versioned separately — a plugin
 declares the API it targets in its `plugin.json`, and that contract changes
 much less often than the bot around it.
 
-## 0.2.0 — 2026-09-10
+## 0.2.0 — 2026-09-11
 
 Plugin API 1.1.
 
@@ -17,6 +17,7 @@ Plugin API 1.1.
 - `doppler.bot()` in the page bridge, returning the bot's name and avatar so a
   page can preview a message without declaring an endpoint for it.
 - The plugin API reference gained a **Pages** section documenting the bridge.
+- `documentation.md` — the plugin API reference as a GitHub page.
 
 ### Changed
 
@@ -29,9 +30,14 @@ Plugin API 1.1.
 
 - A failed `doppler.bot()` lookup now rejects instead of resolving with the
   error body, which had left pages silently showing a placeholder.
+- The dashboard's stats endpoint no longer fails while the bot is reconnecting
+  to the gateway; the latency guard only covered one of discord.py's two
+  sentinel values.
 
 ### Removed
 
+- `deepl` and `google-cloud-translate` from requirements; nothing has imported
+  them since the translation providers were dropped.
 - The undocumented `tab` field in a manifest's `page` block. It never had a
   working dashboard implementation and its handler had been deleted.
 

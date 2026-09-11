@@ -323,9 +323,9 @@ class AIAccess:
 class TranslateAccess:
     """A plugin's route to translation.
 
-    The DeepL and Google keys belong to the broker, so the plugin sends text
-    and receives a translation without the credential ever reaching the process
-    it runs in.
+    Exists for the keyless case: ``google_free`` translates with no provider
+    configured and no credential anywhere. ``ai`` is shorthand for asking the
+    bot's configured model, which a plugin holding ``ctx.ai`` can do itself.
     """
 
     def __init__(self, log: logging.Logger):

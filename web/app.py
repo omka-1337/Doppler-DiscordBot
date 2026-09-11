@@ -1,16 +1,18 @@
 import asyncio
 import os
+import platform
 import secrets
 import time
 import httpx
 import psutil
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from pathlib import Path
 from dotenv import load_dotenv
 from utils.env_editor import update_env_file
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import markdown
@@ -23,6 +25,7 @@ from dopplerbot import __version__ as DOPPLER_VERSION
 from dopplerbot.database import get_settings, get_settings_by_category, set_settings
 from dopplerbot.plugins.manifest import CURRENT_API_VERSION
 from dopplerbot import logs as bot_logs
+from discord import __version__ as discord_version
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -864,14 +867,138 @@ async def stream_logs(websocket: WebSocket):
         pass
 
 
-# The log the stream is showing, as a file. Downloading beats selecting the
-# panel's text when the point is to attach it to a bug report.
-@app.get("/api/logs/download")
-async def download_log():
+# A log on its own rarely explains anything: the same traceback means different
+# things depending on which versions and which plugins produced it. This bundles
+# the state around the log into one file a person can read before deciding to
+# send it anywhere.
+def _mask(value) -> str:
+    text = str(value)
+    if not text:
+        return "(empty)"
+    return f"(set, {len(text)} chars)"
+
+
+def _plugin_lines(plugins: list[dict]) -> list[str]:
+    out = []
+    for plugin in sorted(plugins, key=lambda p: p.get("id", "")):
+        state = "running" if plugin.get("running") else ("enabled" if plugin.get("enabled") else "disabled")
+        out.append(
+            f"  {plugin.get('id', '?'):<16} {plugin.get('version', '?'):<10} "
+            f"api {plugin.get('api_version', '?'):<5} {state:<9} from {plugin.get('installed_from', '?')}"
+        )
+        if plugin.get("error"):
+            out.append(f"      error: {plugin['error']}")
+
+        schema = {f["key"]: f for f in plugin.get("settings_schema", [])}
+        values = plugin.get("values", {}) or {}
+        for key in sorted(values):
+            field = schema.get(key)
+            if field is None:
+                # Hidden settings carry state, not configuration, and their type
+                # is not published -- named but never shown.
+                out.append(f"      {key} = (hidden)")
+            elif field.get("type") == "secret":
+                out.append(f"      {key} = {_mask(values[key])}")
+            else:
+                out.append(f"      {key} = {values[key]!r}")
+    return out
+
+
+async def _diagnostics_report() -> str:
+    lines = [
+        "Doppler diagnostics report",
+        f"generated  {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+        "",
+        "Read this before sending it anywhere: it contains your guild's channel",
+        "and role ids, and whatever your log happens to mention. Secrets are",
+        "replaced with their length, never their value.",
+        "",
+        "=" * 72,
+        "VERSIONS",
+        "=" * 72,
+        f"  Doppler      {DOPPLER_VERSION}",
+        f"  Plugin API   {CURRENT_API_VERSION}",
+        f"  Python       {platform.python_version()}",
+        f"  discord.py   {discord_version}",
+        f"  Host         {platform.system()} {platform.release()}",
+        "",
+    ]
+
+    # Each section is optional: a report that stops at the first thing the bot
+    # cannot answer is exactly the report nobody can use.
+    async def section(title: str, getter):
+        lines.append("=" * 72)
+        lines.append(title)
+        lines.append("=" * 72)
+        try:
+            lines.extend(await getter())
+        except Exception as e:
+            lines.append(f"  unavailable: {e}")
+        lines.append("")
+
+    async def bot_state():
+        stats = await _call_bot("GET", "/internal/stats")
+        return [
+            f"  started at   {stats.get('started_at', '?')}",
+            f"  uptime       {stats.get('uptime_seconds', '?')} s",
+            f"  latency      {stats.get('latency_ms')} ms",
+            f"  guilds       {stats.get('guild_count', '?')}",
+            f"  plugins      {stats.get('plugins_running', '?')} running of {stats.get('plugins_total', '?')}",
+        ]
+
+    async def plugins():
+        return _plugin_lines((await _call_bot("GET", "/internal/plugins")).get("plugins", []))
+
+    async def providers():
+        data = (await _call_broker("GET", "/providers")).get("providers", {})
+        out = []
+        for section_name, fields in data.items():
+            out.append(f"  [{section_name}]")
+            for key, value in sorted(fields.items()):
+                if key == "configured":
+                    for provider, is_set in sorted(value.items()):
+                        out.append(f"      {provider} = {'set' if is_set else 'not set'}")
+                else:
+                    out.append(f"      {key} = {value!r}")
+        return out or ["  nothing configured"]
+
+    async def services():
+        running = (await _call_broker("GET", "/services")).get("services", [])
+        out = []
+        for service in running:
+            out.append(
+                f"  {service.get('name', '?'):<34} {service.get('status', '?'):<10} "
+                f"{service.get('plugin', '?')}/{service.get('service', '?')}"
+            )
+            out.append(f"      image {service.get('image', '?')}")
+        return out or ["  none running"]
+
+    await section("BOT", bot_state)
+    await section("PLUGINS", plugins)
+    await section("AI PROVIDER", providers)
+    await section("SIDECAR SERVICES", services)
+
+    lines.append("=" * 72)
     path = bot_logs.current_log()
-    if path is None or not path.exists():
-        raise HTTPException(status_code=404, detail="No log file yet.")
-    return FileResponse(path, media_type="text/plain", filename=path.name)
+    lines.append(f"LOG  {path.name if path else '(none)'}")
+    lines.append("=" * 72)
+    if path is not None and path.exists():
+        lines.append(path.read_text(encoding="utf-8", errors="replace"))
+    else:
+        lines.append("  no log file yet")
+
+    return "\n".join(lines)
+
+
+@app.get("/api/diagnostics")
+async def download_diagnostics():
+    """One file describing this install, with the current log at the end."""
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    return Response(
+        content=await _diagnostics_report(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="doppler-report-{stamp}.txt"'},
+    )
 
 # ---------------------------------------------------------------------
 

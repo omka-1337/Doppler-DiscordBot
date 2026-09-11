@@ -62,7 +62,11 @@ much less often than the bot around it.
 - One log file per run, under `logs/`, named for when the run started. The
   newest 25 are kept and the oldest is dropped beyond that, so a restart no
   longer overwrites the log that explains why it restarted.
-- A download button on the stats tab for the log currently being streamed.
+- A diagnostics report on the stats tab: versions, bot state, every plugin with
+  its settings, the AI provider's configuration, running sidecars, and the
+  current log, in one file. Secret settings are replaced with their length,
+  never their value, and each section degrades on its own — the report still
+  builds when the bot is down, which is when it is wanted.
 
 ### Fixed
 

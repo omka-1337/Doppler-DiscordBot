@@ -16,6 +16,16 @@ much less often than the bot around it.
 - A slow answer from the bot was reported as "Bot is not reachable", which sent
   people looking in the wrong place. A timeout now says so, and says the work
   may still be in progress.
+- The bot reported itself as connected before it had ever connected, because a
+  client that has not started is not "closed" either. The setup page waited on
+  that flag, so it could move on too soon.
+
+### Changed
+
+- On a fresh install the bot waits for first-run setup instead of exiting and
+  being restarted every few seconds. The internal API is already listening by
+  then, so the dashboard can reach it while the token is still being entered,
+  and a slow setup no longer fills the log directory with one file per attempt.
 
 ## 0.5.0 — 2026-09-11
 

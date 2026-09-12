@@ -112,7 +112,11 @@ async def handle_stats(request):
         # which is every reconnect, not just startup. The old isnan() guard
         # caught the first and let the second through for round() to refuse.
         "latency_ms": round(bot.latency * 1000) if math.isfinite(bot.latency) else None,
-        "connected": not bot.is_closed(),
+        # is_ready(), not is_closed(): a client that has never started is not
+        # "closed" either, so while the bot waits for first-run setup the old
+        # expression claimed it was online and the setup page moved on too soon.
+        # It is also the honest answer during a gateway reconnect.
+        "connected": bot.is_ready(),
     })
 
 # ---------------------------------------------------------------------
@@ -632,6 +636,38 @@ async def on_guild_join(guild: discord.Guild):
 # ---------------------------------------------------------------------
 
 # MAIN START FUNCTION
+# ---------------------------------------------------------------------
+
+# How long between checks while first-run setup is still being filled in.
+TOKEN_POLL_SECONDS = 3
+
+
+async def wait_for_token() -> str:
+    """Block until a bot token exists, however long that takes.
+
+    The container used to exit here and let the restart policy bring it back,
+    which worked but left a restart every few seconds until someone finished
+    setup -- each one writing its own log file, so a slow setup could evict
+    every earlier log. Waiting costs nothing: the internal API is already
+    listening by this point, so the dashboard can talk to this process while
+    the operator is still typing.
+    """
+    token = await resolve_token()
+    if token:
+        return token
+
+    logging.info(
+        "No bot token configured yet. Waiting for first-run setup to be finished "
+        "in the dashboard; nothing else is needed to bring the bot up."
+    )
+    while not token:
+        await asyncio.sleep(TOKEN_POLL_SECONDS)
+        token = await resolve_token()
+
+    logging.info("Bot token received. Connecting to Discord.")
+    return token
+
+
 async def main():
     try:
         logging.info(f"Doppler {__version__} starting up.")
@@ -641,15 +677,7 @@ async def main():
 
         await start_internal_api()
 
-        token = await resolve_token()
-        if not token:
-            # Exiting restarts the container, which re-reads the database — so
-            # finishing setup in the dashboard brings the bot up on its own.
-            logging.error(
-                "No bot token configured yet. Finish the first-run setup in the dashboard; "
-                "this container will pick it up on its next restart."
-            )
-            return
+        token = await wait_for_token()
 
         async with bot:
             await bot.plugins.load_all()

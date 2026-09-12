@@ -4,6 +4,19 @@ Doppler's own version. The plugin API is versioned separately — a plugin
 declares the API it targets in its `plugin.json`, and that contract changes
 much less often than the bot around it.
 
+## Unreleased
+
+### Fixed
+
+- Enabling a plugin twice could crash it. A plugin whose setup waits on the
+  broker takes longer than the dashboard's timeout, so a second click started a
+  second load while the first was still running; both passed the "already
+  loaded?" check and the second died on `add_cog`. Loading, unloading and
+  reloading now take a lock per plugin.
+- A slow answer from the bot was reported as "Bot is not reachable", which sent
+  people looking in the wrong place. A timeout now says so, and says the work
+  may still be in progress.
+
 ## 0.5.0 — 2026-09-11
 
 ### Changed

@@ -577,6 +577,15 @@ async def _call_bot(method: str, path: str, payload: dict | None = None) -> dict
                 response = await client.get(f"{BOT_INTERNAL_API}{path}", timeout=10.0)
             else:
                 response = await client.post(f"{BOT_INTERNAL_API}{path}", json=payload or {}, timeout=15.0)
+    except httpx.TimeoutException as e:
+        # Not the same thing as unreachable, and saying so sends people looking
+        # in the wrong place. Starting a plugin that needs a sidecar can outlast
+        # this, especially the first time, when the image still has to be pulled.
+        raise HTTPException(
+            status_code=504,
+            detail="The bot did not answer in time. It may still be working on it "
+                   "— give it a moment and check the plugin list.",
+        ) from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Bot is not reachable: {e}") from e
 

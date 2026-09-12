@@ -13,6 +13,7 @@ unloading is just dropping one module prefix out of ``sys.modules`` -- which is
 what makes reloading a plugin without restarting the bot possible.
 """
 
+import asyncio
 import importlib
 import importlib.machinery
 import json
@@ -139,7 +140,19 @@ class PluginRegistry:
         # Discovery/load failures, kept so the dashboard can show what broke
         # instead of the user having to read the log.
         self.errors: dict[str, str] = {}
+        # Loading is slow -- a plugin with a sidecar waits on the broker -- and
+        # the dashboard gives up before it finishes, so an impatient second
+        # click used to start a second load while the first was still running.
+        # Both passed the "already loaded?" check and the second died on
+        # add_cog. One lock per plugin makes the check mean something.
+        self._locks: dict[str, asyncio.Lock] = {}
         _install_plugin_package()
+
+    def _lock_for(self, plugin_id: str) -> asyncio.Lock:
+        lock = self._locks.get(plugin_id)
+        if lock is None:
+            lock = self._locks[plugin_id] = asyncio.Lock()
+        return lock
 
     # ---------------------------------------------------------------- discovery
 
@@ -204,6 +217,10 @@ class PluginRegistry:
 
     async def load(self, plugin_id: str) -> bool:
         """Import and start one plugin. Returns whether it came up."""
+        async with self._lock_for(plugin_id):
+            return await self._load(plugin_id)
+
+    async def _load(self, plugin_id: str) -> bool:
         if plugin_id in self.loaded:
             return True
 
@@ -246,6 +263,10 @@ class PluginRegistry:
         off for reloads, so swapping a plugin's code doesn't bounce a service
         that takes a while to come back.
         """
+        async with self._lock_for(plugin_id):
+            return await self._unload(plugin_id, stop_services)
+
+    async def _unload(self, plugin_id: str, stop_services: bool = False) -> bool:
         entry = self.loaded.pop(plugin_id, None)
         if entry is None:
             return False
@@ -278,7 +299,13 @@ class PluginRegistry:
 
     async def reload(self, plugin_id: str) -> bool:
         """Swap in the plugin's code from disk without restarting the bot."""
-        await self.unload(plugin_id)
+        # Taken once for the whole swap: the lock is not reentrant, and an
+        # unload followed by a load must not let anything in between.
+        async with self._lock_for(plugin_id):
+            return await self._reload(plugin_id)
+
+    async def _reload(self, plugin_id: str) -> bool:
+        await self._unload(plugin_id)
         # Re-read the manifest too: a reload should pick up a bumped version or
         # a changed entrypoint, not just changed Python.
         manifest = self.manifests.get(plugin_id)
@@ -289,7 +316,7 @@ class PluginRegistry:
                 self.errors[plugin_id] = str(e)
                 log.error("Cannot reload %r: %s", plugin_id, e)
                 return False
-        return await self.load(plugin_id)
+        return await self._load(plugin_id)
 
     async def load_all(self):
         """Discover everything and start whatever is enabled."""
